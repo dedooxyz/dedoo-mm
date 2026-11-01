@@ -15,7 +15,6 @@ keeper-identity.bin
 # --- build output ------------------------------------------------------------
 /dist/
 /bin/
-/wojak-keeper
 *.test
 *.out
 

@@ -1,5 +1,5 @@
 // Package p2p implements go-libp2p-based inter-keeper coordination.
-// Protocol: /wojak-keeper/v3 — Noise-encrypted streams over TCP/QUIC.
+// Protocol: /dedoo-mm/v3 — Noise-encrypted streams over TCP/QUIC.
 // Bootstrap VPS runs Circuit Relay v2 + DHT server; keeper nodes use
 // hole punching with relay fallback and Kademlia DHT peer discovery.
 package p2p
@@ -30,7 +30,7 @@ import (
 const (
 	// KeeperProtocol is the custom libp2p protocol ID for inter-keeper messages.
 	// v2: adds reject + recovery messages and the unified proposal flow.
-	KeeperProtocol = "/wojak-keeper/v3"
+	KeeperProtocol = "/dedoo-mm/v3"
 
 	maxMsgBytes = 8 << 20 // 8 MB; a 100-input transfer tx hex fits comfortably
 
@@ -247,7 +247,7 @@ func NewNode(ctx context.Context, o Options) (*Node, error) {
 	// Rendezvous discovery on the DHT (finds other keepers by consensus hash).
 	if !o.IsBootstrap && o.UsePublicDHT {
 		routingDiscovery := drouting.NewRoutingDiscovery(d)
-		rendezvousNS := fmt.Sprintf("wojak-keeper-%s", o.VaultHash[:16])
+		rendezvousNS := fmt.Sprintf("dedoo-mm-%s", o.VaultHash[:16])
 		dutil.Advertise(ctx, routingDiscovery, rendezvousNS)
 		go n.discoveryLoop(ctx, routingDiscovery, rendezvousNS)
 	}
