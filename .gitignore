@@ -34,3 +34,6 @@ keeper-identity.bin
 *.swo
 .idea/
 .vscode/
+
+# local release packaging output
+release-assets/

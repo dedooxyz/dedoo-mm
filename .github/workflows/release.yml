@@ -1,0 +1,120 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag (for example v0.1.1)"
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - run: go vet ./...
+      - run: go test -short ./...
+
+  build:
+    needs: test
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - goos: linux
+            goarch: amd64
+            goarm: ""
+            ext: ""
+            name: linux-amd64
+          - goos: linux
+            goarch: arm64
+            goarm: ""
+            ext: ""
+            name: linux-arm64
+          - goos: linux
+            goarch: arm
+            goarm: "7"
+            ext: ""
+            name: linux-armv7
+          - goos: darwin
+            goarch: amd64
+            goarm: ""
+            ext: ""
+            name: darwin-amd64
+          - goos: darwin
+            goarch: arm64
+            goarm: ""
+            ext: ""
+            name: darwin-arm64
+          - goos: windows
+            goarch: amd64
+            goarm: ""
+            ext: ".exe"
+            name: windows-amd64
+          - goos: windows
+            goarch: arm64
+            goarm: ""
+            ext: ".exe"
+            name: windows-arm64
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Build
+        env:
+          CGO_ENABLED: "0"
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+          GOARM: ${{ matrix.goarm }}
+        run: |
+          mkdir -p bin
+          go build -trimpath -ldflags "-s -w" \
+            -o "bin/wojak-keeper-${{ matrix.name }}${{ matrix.ext }}" ./cmd/wojak-keeper
+      - uses: actions/upload-artifact@v4
+        with:
+          name: bin-${{ matrix.name }}
+          path: bin/wojak-keeper-${{ matrix.name }}${{ matrix.ext }}
+          if-no-files-found: error
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: bin-*
+          path: bin
+          merge-multiple: true
+      - name: Package
+        env:
+          TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+        run: |
+          chmod +x bin/* scripts/package-release.sh
+          ./scripts/package-release.sh "$TAG" ./bin
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+        run: |
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" release-assets/* --clobber
+          else
+            gh release create "$TAG" release-assets/* \
+              --title "Dedoo Multisig Manager $TAG" \
+              --generate-notes \
+              --target "$GITHUB_SHA"
+          fi

@@ -95,11 +95,12 @@ Do not proceed if the electrs endpoint or relay port is unreachable.
 1. Upload the package and install:
 
 ```bash
-scp dedoo-multisig-manager-linux-amd64.tar.gz root@HOST:/root/
+VERSION=v0.1.0
+scp "dedoo-multisig-manager-${VERSION}-linux-amd64.tar.gz" root@HOST:/root/
 ssh root@HOST
 cd /root
-tar xzf dedoo-multisig-manager-linux-amd64.tar.gz
-cd dedoo-multisig-manager-linux-amd64
+tar xzf "dedoo-multisig-manager-${VERSION}-linux-amd64.tar.gz"
+cd "dedoo-multisig-manager-${VERSION}-linux-amd64"
 sha256sum -c SHA256SUMS
 ./install.sh ./wojak-keeper .
 ```

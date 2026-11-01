@@ -77,8 +77,9 @@ CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
 ## Install (one keeper node)
 
 ```bash
-tar xzf dedoo-multisig-manager-linux-amd64.tar.gz
-cd dedoo-multisig-manager-linux-amd64
+VERSION=v0.1.0
+tar xzf "dedoo-multisig-manager-${VERSION}-linux-amd64.tar.gz"
+cd "dedoo-multisig-manager-${VERSION}-linux-amd64"
 ./install.sh ./wojak-keeper .
 $EDITOR /opt/wojak-keeper/keeper.env
 systemctl enable --now wojak-keeper
@@ -98,6 +99,16 @@ to a trusted LAN address with Basic Auth enabled.
 All three operators must share the same chain, vault/redeem definition,
 threshold and `P2P_GROUP`. Each uses a unique `KEEPER_SELF_INDEX` and their own
 WIF.
+
+## CI/CD
+
+- `.github/workflows/ci.yml` runs `go vet`, short tests, and cross-compiles
+  every release target on pushes and pull requests.
+- `.github/workflows/release.yml` runs on `v*` tags (or manual dispatch),
+  builds Linux amd64/arm64/armv7, macOS Intel/Apple Silicon, and Windows
+  amd64/ARM64, packages them, and publishes a GitHub Release.
+- `scripts/package-release.sh` creates the same archives locally from a
+  directory of prebuilt binaries.
 
 ## Releases and the distribution archive
 

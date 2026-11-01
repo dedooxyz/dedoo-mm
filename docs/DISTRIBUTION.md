@@ -94,7 +94,7 @@ group. The redeem script and P2SH address are public and safe to share.
 ## 1. Package
 
 ```bash
-dedoo-multisig-manager-linux-amd64/   (top level of the tarball)
+dedoo-multisig-manager-<version>-linux-amd64/   (top level of the tarball)
 ├── wojak-keeper            # static linux/amd64 binary
 ├── keeper.env.example
 ├── wojak-keeper.service
@@ -132,11 +132,12 @@ Recommended hostname: `keeper-<index>.<your-domain>`.
 ## 3. Install
 
 ```bash
-scp dedoo-multisig-manager-linux-amd64.tar.gz root@YOUR_HOST:/root/
+VERSION=v0.1.0
+scp "dedoo-multisig-manager-${VERSION}-linux-amd64.tar.gz" root@YOUR_HOST:/root/
 ssh root@YOUR_HOST
 cd /root
-tar xzf dedoo-multisig-manager-linux-amd64.tar.gz
-cd dedoo-multisig-manager-linux-amd64
+tar xzf "dedoo-multisig-manager-${VERSION}-linux-amd64.tar.gz"
+cd "dedoo-multisig-manager-${VERSION}-linux-amd64"
 ./install.sh ./wojak-keeper .
 ```
 
