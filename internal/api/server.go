@@ -16,8 +16,8 @@ import (
 	"strings"
 	"time"
 
-	"wojak-keeper/internal/chain"
-	"wojak-keeper/internal/processor"
+	"github.com/dedooxyz/dedoo-mm/internal/chain"
+	"github.com/dedooxyz/dedoo-mm/internal/processor"
 )
 
 //go:embed webui

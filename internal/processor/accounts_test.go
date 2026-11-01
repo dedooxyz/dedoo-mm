@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"wojak-keeper/internal/chain"
+	"github.com/dedooxyz/dedoo-mm/internal/chain"
 
 	"github.com/btcsuite/btcutil/base58"
 )

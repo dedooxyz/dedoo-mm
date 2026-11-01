@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	"wojak-keeper/internal/chain"
-	"wojak-keeper/internal/p2p"
+	"github.com/dedooxyz/dedoo-mm/internal/chain"
+	"github.com/dedooxyz/dedoo-mm/internal/p2p"
 )
 
 // TestTrioMultiWallet runs one trio that manages TWO multisig wallets on the

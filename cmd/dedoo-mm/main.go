@@ -1,4 +1,4 @@
-// Command wojak-keeper runs one node of a 2-of-3 multisig keeper trio.
+// Command dedoo-mm runs one node of a 2-of-3 multisig keeper trio.
 package main
 
 import (
@@ -9,11 +9,11 @@ import (
 	"os/signal"
 	"syscall"
 
-	"wojak-keeper/internal/api"
-	"wojak-keeper/internal/chain"
-	"wojak-keeper/internal/config"
-	"wojak-keeper/internal/p2p"
-	"wojak-keeper/internal/processor"
+	"github.com/dedooxyz/dedoo-mm/internal/api"
+	"github.com/dedooxyz/dedoo-mm/internal/chain"
+	"github.com/dedooxyz/dedoo-mm/internal/config"
+	"github.com/dedooxyz/dedoo-mm/internal/p2p"
+	"github.com/dedooxyz/dedoo-mm/internal/processor"
 )
 
 func main() {

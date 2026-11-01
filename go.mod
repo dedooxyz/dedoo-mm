@@ -1,4 +1,4 @@
-module wojak-keeper
+module github.com/dedooxyz/dedoo-mm
 
 go 1.25.7
 

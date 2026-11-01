@@ -8,8 +8,8 @@ import (
 	"log"
 	"time"
 
-	"wojak-keeper/internal/chain"
-	"wojak-keeper/internal/p2p"
+	"github.com/dedooxyz/dedoo-mm/internal/chain"
+	"github.com/dedooxyz/dedoo-mm/internal/p2p"
 
 	"github.com/btcsuite/btcd/btcec/v2"
 )

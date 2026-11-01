@@ -15,7 +15,7 @@ Include:
 
 ## Operational security rules
 
-- **Never commit** `keeper.env`, `keeper-keys.json`, `keeper-state.json`,
+- **Never commit** `dedoo-mm.env`, `keeper-keys.json`, `keeper-state.json`,
   `keeper-accounts.json`, `keeper-identity.bin`, a WIF, or a screenshot that
   shows a private key.
 - Each operator holds only their own WIF. Never send a WIF to another operator,

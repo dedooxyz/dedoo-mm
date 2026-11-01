@@ -11,7 +11,7 @@ import (
 	"strings"
 	"time"
 
-	"wojak-keeper/internal/chain"
+	"github.com/dedooxyz/dedoo-mm/internal/chain"
 
 	"github.com/btcsuite/btcd/btcec/v2"
 )

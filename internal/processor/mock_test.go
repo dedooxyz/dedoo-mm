@@ -8,8 +8,8 @@ import (
 	"testing"
 	"time"
 
-	"wojak-keeper/internal/chain"
-	"wojak-keeper/internal/config"
+	"github.com/dedooxyz/dedoo-mm/internal/chain"
+	"github.com/dedooxyz/dedoo-mm/internal/config"
 
 	"github.com/btcsuite/btcd/btcec/v2"
 	"golang.org/x/crypto/ripemd160"
@@ -236,7 +236,7 @@ func vaultFixture(t *testing.T, mc *mockChain, redeem, vaultAddr string) []chain
 }
 
 // canonicalDest is a canonical WojakCoin P2PKH address (version 73).
-var canonicalDest = chain.EncodeAddress(chain.AddrPubkeyVersion, chain.Hash160([]byte("wojak-keeper-test-destination")))
+var canonicalDest = chain.EncodeAddress(chain.AddrPubkeyVersion, chain.Hash160([]byte("dedoo-mm-test-destination")))
 
 func waitFor(tries int, cond func() bool) bool {
 	for i := 0; i < tries; i++ {

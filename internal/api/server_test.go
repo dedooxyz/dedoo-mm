@@ -9,8 +9,8 @@ import (
 	"strings"
 	"testing"
 
-	"wojak-keeper/internal/chain"
-	"wojak-keeper/internal/processor"
+	"github.com/dedooxyz/dedoo-mm/internal/chain"
+	"github.com/dedooxyz/dedoo-mm/internal/processor"
 )
 
 // fakeBackend implements Backend with canned values and call recording, so

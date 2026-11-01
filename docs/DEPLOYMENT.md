@@ -16,22 +16,22 @@ fully custom profile (`CHAIN=custom`) where every chain parameter comes from
 ## 0. Package layout
 
 ```
-wojak-keeper-linux-amd64/
-├── wojak-keeper              # static binary
-├── keeper.env.example        # configuration template
-├── wojak-keeper.service      # systemd unit
-├── install.sh                # installer (root)
-├── DEPLOYMENT.md             # this guide
+dedoo-multisig-manager-<version>-linux-amd64/
+├── dedoo-mm                 # static binary
+├── dedoo-mm.env.example     # configuration template
+├── dedoo-mm.service         # systemd unit
+├── install.sh               # installer (root)
+├── DEPLOYMENT.md            # this guide
 └── SHA256SUMS
 ```
 
 The installer creates:
 
-- `/opt/wojak-keeper/wojak-keeper` — binary
-- `/opt/wojak-keeper/keeper.env` — config (never overwritten on upgrade)
-- `/opt/wojak-keeper/keeper-state.json` — persisted proposals
-- user/group `wojakkeeper`
-- unit `/etc/systemd/system/wojak-keeper.service`
+- `/opt/dedoo-mm/dedoo-mm` — binary
+- `/opt/dedoo-mm/dedoo-mm.env` — config (never overwritten on upgrade)
+- `/opt/dedoo-mm/keeper-state.json` — persisted proposals
+- user/group `dedoo`
+- unit `/etc/systemd/system/dedoo-mm.service`
 
 ---
 
@@ -49,16 +49,19 @@ The installer creates:
 Copy the package to the server and install:
 
 ```bash
-scp -r wojak-keeper-linux-amd64 root@YOUR_HOST:/root/
+VERSION=v0.1.0
+scp "dedoo-multisig-manager-${VERSION}-linux-amd64.tar.gz" root@YOUR_HOST:/root/
 ssh root@YOUR_HOST
-cd /root/wojak-keeper-linux-amd64
-./install.sh ./wojak-keeper .
+cd /root
+tar xzf "dedoo-multisig-manager-${VERSION}-linux-amd64.tar.gz"
+cd "dedoo-multisig-manager-${VERSION}-linux-amd64"
+./install.sh ./dedoo-mm .
 ```
 
 Verify the binary:
 
 ```bash
-/opt/wojak-keeper/wojak-keeper --help 2>&1 | head -5 || true
+/opt/dedoo-mm/dedoo-mm --help 2>&1 | head -5 || true
 sha256sum -c SHA256SUMS
 ```
 
@@ -67,7 +70,7 @@ sha256sum -c SHA256SUMS
 ## 3. Configure
 
 ```bash
-nano /opt/wojak-keeper/keeper.env
+nano /opt/dedoo-mm/dedoo-mm.env
 ```
 
 ### 3.1 Safe first boot (relay only, no key needed)
@@ -82,9 +85,9 @@ API_LISTEN="127.0.0.1:8080"
 ```
 
 ```bash
-systemctl start wojak-keeper
-systemctl status wojak-keeper --no-pager
-journalctl -u wojak-keeper -n 30 --no-pager
+systemctl start dedoo-mm
+systemctl status dedoo-mm --no-pager
+journalctl -u dedoo-mm -n 30 --no-pager
 ```
 
 ### 3.2 Going live (keeper mode)
@@ -123,7 +126,7 @@ P2P_PUBLIC_DHT="true"
 # P2P_PEERS="/ip4/<node0>/tcp/4000/p2p/<ID0>,/ip4/<node1>/tcp/4000/p2p/<ID1>,/ip4/<node2>/tcp/4000/p2p/<ID2>"
 
 API_LISTEN="127.0.0.1:8080"
-STATE_FILE="/opt/wojak-keeper/keeper-state.json"
+STATE_FILE="/opt/dedoo-mm/keeper-state.json"
 ```
 
 Startup refuses to run if any of these do not agree:
@@ -133,8 +136,8 @@ Startup refuses to run if any of these do not agree:
 - `KEEPER_WIF` must use the chain's WIF version (WJK 201, JKC 144)
 
 ```bash
-systemctl restart wojak-keeper
-journalctl -u wojak-keeper -f
+systemctl restart dedoo-mm
+journalctl -u dedoo-mm -f
 ```
 
 Expected log lines:
@@ -192,14 +195,14 @@ to the internet except the P2P port.
 If holders cannot use SSH tunnels, enable Basic Auth and put TLS in front:
 
 ```ini
-# /opt/wojak-keeper/keeper.env
+# /opt/dedoo-mm/dedoo-mm.env
 API_LISTEN="127.0.0.1:8090"
 API_AUTH_USER="holder"
 API_AUTH_PASS="a-long-random-password"
 ```
 
 ```bash
-systemctl restart wojak-keeper
+systemctl restart dedoo-mm
 ```
 
 Then expose it with Caddy (automatic HTTPS) and keep the API itself local:
@@ -263,7 +266,7 @@ not recommended.
 
 ## 7b. Multi-wallet operations (one chain per node)
 
-One node is deliberately restricted to **one chain** (`CHAIN` in keeper.env).
+One node is deliberately restricted to **one chain** (`CHAIN` in dedoo-mm.env).
 Within that chain it can manage several multisig wallets at the same time:
 
 - **Create wallet** on the Wallets page from 3 public keys or a redeem script.
@@ -287,30 +290,30 @@ that chain's config — a single process never mixes chains.
 State is a single JSON file:
 
 ```bash
-systemctl stop wojak-keeper
-cp /opt/wojak-keeper/keeper-state.json /root/keeper-state-$(date +%F).json
-cp /opt/wojak-keeper/keeper-accounts.json /root/keeper-accounts-$(date +%F).json
-systemctl start wojak-keeper
+systemctl stop dedoo-mm
+cp /opt/dedoo-mm/keeper-state.json /root/keeper-state-$(date +%F).json
+cp /opt/dedoo-mm/keeper-accounts.json /root/keeper-accounts-$(date +%F).json
+systemctl start dedoo-mm
 ```
 
 Upgrade (config and state are preserved):
 
 ```bash
-scp wojak-keeper root@YOUR_HOST:/root/
+scp dedoo-mm root@YOUR_HOST:/root/
 ssh root@YOUR_HOST
-install -m 0755 /root/wojak-keeper /opt/wojak-keeper/wojak-keeper.new
-mv -f /opt/wojak-keeper/wojak-keeper.new /opt/wojak-keeper/wojak-keeper
-systemctl restart wojak-keeper
+install -m 0755 /root/dedoo-mm /opt/dedoo-mm/dedoo-mm.new
+mv -f /opt/dedoo-mm/dedoo-mm.new /opt/dedoo-mm/dedoo-mm
+systemctl restart dedoo-mm
 ```
 
-Protocol note: keeper P2P uses `/wojak-keeper/v3`; all three nodes must run the
+Protocol note: keeper P2P uses `/dedoo-mm/v3`; all three nodes must run the
 same protocol version.
 
 ---
 
 ## 9. Security checklist
 
-- [ ] `keeper.env` mode `0600`, owner `wojakkeeper`
+- [ ] `dedoo-mm.env` mode `0600`, owner `dedoo`
 - [ ] Public host: API bound to `127.0.0.1`, accessed via SSH tunnel
 - [ ] Trusted LAN only: API bound to the LAN IP, Basic Auth enabled
 - [ ] P2P port open; all other ports closed
@@ -332,14 +335,14 @@ same protocol version.
 | `peers 0` / `peers 1` | Firewall UDP/TCP, wrong `P2P_PEERS`, peers not running |
 | `electrs HTTP status 429` | Rate limited; the client retries automatically |
 | UI shows 0 balance | Wrong `VAULT_ADDRESS`/chain endpoint |
-| Service exits immediately | `journalctl -u wojak-keeper -n 50 --no-pager` |
+| Service exits immediately | `journalctl -u dedoo-mm -n 50 --no-pager` |
 
 Uninstall:
 
 ```bash
-systemctl disable --now wojak-keeper
-rm -f /etc/systemd/system/wojak-keeper.service
+systemctl disable --now dedoo-mm
+rm -f /etc/systemd/system/dedoo-mm.service
 systemctl daemon-reload
-rm -rf /opt/wojak-keeper
-userdel wojakkeeper
+rm -rf /opt/dedoo-mm
+userdel dedoo
 ```

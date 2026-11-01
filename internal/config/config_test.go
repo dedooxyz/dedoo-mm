@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"wojak-keeper/internal/chain"
+	"github.com/dedooxyz/dedoo-mm/internal/chain"
 )
 
 func TestLoadBootstrapDefaults(t *testing.T) {

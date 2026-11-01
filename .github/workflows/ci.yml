@@ -76,4 +76,4 @@ jobs:
         run: |
           mkdir -p bin
           go build -trimpath -ldflags "-s -w" \
-            -o "bin/wojak-keeper-${{ matrix.name }}${{ matrix.ext }}" ./cmd/wojak-keeper
+            -o "bin/dedoo-mm-${{ matrix.name }}${{ matrix.ext }}" ./cmd/dedoo-mm

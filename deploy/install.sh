@@ -1,17 +1,18 @@
 #!/usr/bin/env bash
 # Install/upgrade Dedoo Multisig Manager on a systemd host. Run as root.
 #
-#   ./install.sh /path/to/wojak-keeper-binary [package-dir]
+#   ./install.sh /path/to/dedoo-mm [package-dir]
 #
-# Creates the wojakkeeper system user, installs the binary under
-# /opt/wojak-keeper, installs the systemd unit and enables the service.
-# An existing keeper.env or state file is never overwritten.
+# Creates the dedoo system user, installs the binary under /opt/dedoo-mm,
+# installs the systemd unit and enables the service. An existing dedoo-mm.env
+# or state file is never overwritten.
 set -euo pipefail
 
-BIN="${1:?usage: install.sh <wojak-keeper-binary> [package-dir]}"
+BIN="${1:?usage: install.sh <dedoo-mm-binary> [package-dir]}"
 PKG_DIR="${2:-$(cd "$(dirname "$0")" && pwd)}"
-DEST=/opt/wojak-keeper
-UNIT=/etc/systemd/system/wojak-keeper.service
+DEST=/opt/dedoo-mm
+UNIT=/etc/systemd/system/dedoo-mm.service
+SERVICE_USER=dedoo
 
 if [ "$(id -u)" -ne 0 ]; then
   echo "run as root" >&2
@@ -22,31 +23,32 @@ if [ ! -x "$BIN" ]; then
   exit 1
 fi
 
-if ! id wojakkeeper >/dev/null 2>&1; then
-  useradd --system --home "$DEST" --shell /usr/sbin/nologin --user-group wojakkeeper
+if ! id "$SERVICE_USER" >/dev/null 2>&1; then
+  useradd --system --home "$DEST" --shell /usr/sbin/nologin --user-group "$SERVICE_USER"
 fi
 
-install -d -m 0750 -o wojakkeeper -g wojakkeeper "$DEST"
-install -m 0755 -o root -g root "$BIN" "$DEST/wojak-keeper.new"
-mv -f "$DEST/wojak-keeper.new" "$DEST/wojak-keeper"
+install -d -m 0750 -o "$SERVICE_USER" -g "$SERVICE_USER" "$DEST"
+install -m 0755 -o root -g root "$BIN" "$DEST/dedoo-mm.new"
+mv -f "$DEST/dedoo-mm.new" "$DEST/dedoo-mm"
 
-if [ ! -f "$DEST/keeper.env" ]; then
-  if [ -f "$PKG_DIR/keeper.env.example" ]; then
-    install -m 0600 -o wojakkeeper -g wojakkeeper "$PKG_DIR/keeper.env.example" "$DEST/keeper.env"
-    echo "installed template: $DEST/keeper.env  <-- EDIT THIS before going live"
+if [ ! -f "$DEST/dedoo-mm.env" ]; then
+  if [ -f "$PKG_DIR/dedoo-mm.env.example" ]; then
+    install -m 0600 -o "$SERVICE_USER" -g "$SERVICE_USER" \
+      "$PKG_DIR/dedoo-mm.env.example" "$DEST/dedoo-mm.env"
+    echo "installed template: $DEST/dedoo-mm.env  <-- EDIT THIS before going live"
   fi
 else
-  chown wojakkeeper:wojakkeeper "$DEST/keeper.env"
-  chmod 0600 "$DEST/keeper.env"
-  echo "kept existing $DEST/keeper.env"
+  chown "$SERVICE_USER:$SERVICE_USER" "$DEST/dedoo-mm.env"
+  chmod 0600 "$DEST/dedoo-mm.env"
+  echo "kept existing $DEST/dedoo-mm.env"
 fi
 
-install -m 0644 "$PKG_DIR/wojak-keeper.service" "$UNIT"
+install -m 0644 "$PKG_DIR/dedoo-mm.service" "$UNIT"
 systemctl daemon-reload
-systemctl enable wojak-keeper.service
+systemctl enable dedoo-mm.service
 
 echo
 echo "Installed. Next steps:"
-echo "  1. edit $DEST/keeper.env (WIF, vault, redeem script, peers)"
-echo "  2. systemctl start wojak-keeper"
-echo "  3. systemctl status wojak-keeper --no-pager"
+echo "  1. edit $DEST/dedoo-mm.env (WIF, vault, redeem script, peers)"
+echo "  2. systemctl start dedoo-mm"
+echo "  3. systemctl status dedoo-mm --no-pager"

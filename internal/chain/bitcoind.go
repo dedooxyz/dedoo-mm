@@ -63,7 +63,7 @@ func NewBitcoindClient(url, user, pass string, timeout time.Duration) *BitcoindC
 func (b *BitcoindClient) call(ctx context.Context, method string, params []interface{}, out interface{}) error {
 	payload := map[string]interface{}{
 		"jsonrpc": "1.0",
-		"id":      "wojak-keeper",
+		"id":      "dedoo-mm",
 		"method":  method,
 		"params":  params,
 	}

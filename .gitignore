@@ -37,3 +37,4 @@ keeper-identity.bin
 
 # local release packaging output
 release-assets/
+/dedoo-mm

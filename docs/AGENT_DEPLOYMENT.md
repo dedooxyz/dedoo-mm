@@ -15,7 +15,7 @@ private keys.
 **Never**
 
 - ask the operator to paste a WIF into chat, a shell command line, a log, or a
-  ticket; have them edit `keeper.env` locally or use the UI;
+  ticket; have them edit `dedoo-mm.env` locally or use the UI;
 - print file contents that contain `KEEPER_WIF`, `API_AUTH_PASS`, or
   `keys.json`;
 - transfer, sign or broadcast mainnet funds without an explicit request;
@@ -26,7 +26,7 @@ private keys.
 **Always**
 
 - work on the operator's own host with their SSH key;
-- keep `keeper.env` and `keys.json` at `0600`, owned by `wojakkeeper`;
+- keep `dedoo-mm.env` and `keys.json` at `0600`, owned by `dedoo`;
 - verify `VAULT_ADDRESS`, `REQUIRED_SIGS` and WIF version before starting;
 - keep `AUTO_SIGN=false`, `AUTO_BROADCAST=false`;
 - ask the operator to approve every on-chain action;
@@ -102,10 +102,10 @@ cd /root
 tar xzf "dedoo-multisig-manager-${VERSION}-linux-amd64.tar.gz"
 cd "dedoo-multisig-manager-${VERSION}-linux-amd64"
 sha256sum -c SHA256SUMS
-./install.sh ./wojak-keeper .
+./install.sh ./dedoo-mm .
 ```
 
-2. The operator edits `/opt/wojak-keeper/keeper.env` (never paste the WIF in
+2. The operator edits `/opt/dedoo-mm/dedoo-mm.env` (never paste the WIF in
    chat). Required shape:
 
 ```ini
@@ -137,16 +137,16 @@ P2P_BOOTSTRAP="<relay multiaddr provided privately>"
 API_LISTEN="127.0.0.1:8090"
 API_AUTH_USER="holder"
 API_AUTH_PASS="<generated>"
-STATE_FILE="/opt/wojak-keeper/keeper-state.json"
-ACCOUNTS_FILE="/opt/wojak-keeper/keeper-accounts.json"
-KEYS_FILE="/opt/wojak-keeper/keeper-keys.json"
+STATE_FILE="/opt/dedoo-mm/keeper-state.json"
+ACCOUNTS_FILE="/opt/dedoo-mm/keeper-accounts.json"
+KEYS_FILE="/opt/dedoo-mm/keeper-keys.json"
 ```
 
 3. Permissions:
 
 ```bash
-chown wojakkeeper:wojakkeeper /opt/wojak-keeper/keeper.env
-chmod 600 /opt/wojak-keeper/keeper.env
+chown dedoo:dedoo /opt/dedoo-mm/dedoo-mm.env
+chmod 600 /opt/dedoo-mm/dedoo-mm.env
 ```
 
 4. Firewall (public VPS only):
@@ -159,10 +159,10 @@ ufw allow 4000/udp
 5. Start and validate:
 
 ```bash
-systemctl enable --now wojak-keeper
+systemctl enable --now dedoo-mm
 sleep 3
-systemctl is-active wojak-keeper
-journalctl -u wojak-keeper -n 40 --no-pager
+systemctl is-active dedoo-mm
+journalctl -u dedoo-mm -n 40 --no-pager
 ```
 
 Success criteria in the log:
@@ -219,7 +219,7 @@ API/UI come up. Then:
 3. add the operator's WIF under Wallets → Signing keys.
 
 The node starts signing as soon as a matching key is added. This avoids
-putting a WIF in `keeper.env` at all. All three operators must add the same
+putting a WIF in `dedoo-mm.env` at all. All three operators must add the same
 wallet definition.
 
 ---
@@ -285,7 +285,7 @@ Backups: state/accounts/keys paths confirmed
 | Relay unreachable | Check outbound TCP/UDP 4000; try `nc`; do not disable auth. |
 | Peers stay 0/1 | Check `P2P_GROUP`, relay, firewall, other keepers. |
 | Port 4000/8090 busy | Stop conflicting service; choose another API port only. |
-| Service restart loop | `journalctl -u wojak-keeper -n 80`; report without secrets. |
+| Service restart loop | `journalctl -u dedoo-mm -n 80`; report without secrets. |
 
 Escalate to the operator for any action that could move funds. Deployment
 assistance never includes signing or broadcasting without explicit approval.

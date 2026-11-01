@@ -1,4 +1,4 @@
-// Package config loads wojak-keeper runtime configuration from env.
+// Package config loads Dedoo Multisig Manager runtime configuration from env.
 // One process manages exactly ONE 2-of-3 multisig vault; the chain profile
 // (CHAIN=wojakcoin|junkcoin) selects address/WIF versions.
 package config
@@ -11,7 +11,7 @@ import (
 	"strconv"
 	"strings"
 
-	"wojak-keeper/internal/chain"
+	"github.com/dedooxyz/dedoo-mm/internal/chain"
 )
 
 // Mode selects the process role.

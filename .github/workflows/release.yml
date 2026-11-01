@@ -82,11 +82,11 @@ jobs:
         run: |
           mkdir -p bin
           go build -trimpath -ldflags "-s -w" \
-            -o "bin/wojak-keeper-${{ matrix.name }}${{ matrix.ext }}" ./cmd/wojak-keeper
+            -o "bin/dedoo-mm-${{ matrix.name }}${{ matrix.ext }}" ./cmd/dedoo-mm
       - uses: actions/upload-artifact@v7
         with:
           name: bin-${{ matrix.name }}
-          path: bin/wojak-keeper-${{ matrix.name }}${{ matrix.ext }}
+          path: bin/dedoo-mm-${{ matrix.name }}${{ matrix.ext }}
           if-no-files-found: error
 
   release:

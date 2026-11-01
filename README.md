@@ -31,7 +31,7 @@ all keys.
 - Each operator generates and holds **only their own WIF**.
 - WIFs and imported keys are stored locally (`0600`) and are never returned by
   the API.
-- `keeper.env` and `keeper-keys.json` must never be committed or shared.
+- `dedoo-mm.env` and `keeper-keys.json` must never be committed or shared.
 - A node can start in **manager mode** without a WIF/vault; the wallet and key
   are added from the UI.
 - Two signatures from independent operators are required; `AUTO_SIGN` and
@@ -52,13 +52,13 @@ bytes. A node never mixes chains.
 ## Repository layout
 
 ```
-cmd/wojak-keeper/        entrypoint
+cmd/dedoo-mm/            entrypoint
 internal/api/            REST API + embedded web UI
 internal/chain/          chain profiles, electrs/RPC clients, tx builder
 internal/config/         environment configuration and validation
 internal/p2p/            libp2p node, protocol v3 messages
 internal/processor/      keeper state machine, wallets, keys, proposals
-config/                  keeper.env.example
+config/                  dedoo-mm.env.example
 deploy/                  systemd unit and installer
 docs/                    deployment, distribution and agent guides
 ```
@@ -71,7 +71,7 @@ Requires Go 1.24+ (see `go.mod`).
 go build ./...
 go test ./...
 CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
-  go build -trimpath -ldflags "-s -w" -o wojak-keeper ./cmd/wojak-keeper
+  go build -trimpath -ldflags "-s -w" -o dedoo-mm ./cmd/dedoo-mm
 ```
 
 ## Install (one keeper node)
@@ -80,9 +80,9 @@ CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
 VERSION=v0.1.0
 tar xzf "dedoo-multisig-manager-${VERSION}-linux-amd64.tar.gz"
 cd "dedoo-multisig-manager-${VERSION}-linux-amd64"
-./install.sh ./wojak-keeper .
-$EDITOR /opt/wojak-keeper/keeper.env
-systemctl enable --now wojak-keeper
+./install.sh ./dedoo-mm .
+$EDITOR /opt/dedoo-mm/dedoo-mm.env
+systemctl enable --now dedoo-mm
 ```
 
 The UI/API listens on `127.0.0.1:8080` by default. Use an SSH tunnel, or bind

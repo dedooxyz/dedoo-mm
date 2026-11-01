@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"wojak-keeper/internal/p2p"
+	"github.com/dedooxyz/dedoo-mm/internal/p2p"
 )
 
 // TestTrioIntegration spins up THREE real keeper nodes (real libp2p mesh,

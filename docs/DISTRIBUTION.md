@@ -95,9 +95,9 @@ group. The redeem script and P2SH address are public and safe to share.
 
 ```bash
 dedoo-multisig-manager-<version>-linux-amd64/   (top level of the tarball)
-├── wojak-keeper            # static linux/amd64 binary
-├── keeper.env.example
-├── wojak-keeper.service
+├── dedoo-mm            # static linux/amd64 binary
+├── dedoo-mm.env.example
+├── dedoo-mm.service
 ├── install.sh
 ├── DEPLOYMENT.md
 ├── DISTRIBUTION.md         # this guide
@@ -111,8 +111,7 @@ Verify:
 sha256sum -c SHA256SUMS
 ```
 
-The technical binary/service names keep the historical `wojak-keeper` prefix
-for upgrade compatibility; the product is Dedoo Multisig Manager.
+The binary is installed as `dedoo-mm`; the product is Dedoo Multisig Manager.
 
 ---
 
@@ -138,21 +137,21 @@ ssh root@YOUR_HOST
 cd /root
 tar xzf "dedoo-multisig-manager-${VERSION}-linux-amd64.tar.gz"
 cd "dedoo-multisig-manager-${VERSION}-linux-amd64"
-./install.sh ./wojak-keeper .
+./install.sh ./dedoo-mm .
 ```
 
 The installer creates:
 
-- `/opt/wojak-keeper/wojak-keeper`
-- `/opt/wojak-keeper/keeper.env` (template, never overwritten on upgrade)
-- user `wojakkeeper`
-- unit `wojak-keeper.service` (do not start yet for mainnet unless configured)
+- `/opt/dedoo-mm/dedoo-mm`
+- `/opt/dedoo-mm/dedoo-mm.env` (template, never overwritten on upgrade)
+- user `dedoo`
+- unit `dedoo-mm.service` (do not start yet for mainnet unless configured)
 
 ---
 
 ## 4. Configure WojakCoin mainnet
 
-Edit `/opt/wojak-keeper/keeper.env` **on the operator host only**:
+Edit `/opt/dedoo-mm/dedoo-mm.env` **on the operator host only**:
 
 ```ini
 ### Chain — one chain per node
@@ -193,17 +192,17 @@ P2P_BOOTSTRAP="<relay multiaddr provided privately>"
 API_LISTEN="127.0.0.1:8090"
 API_AUTH_USER="holder"
 API_AUTH_PASS="<long random password>"
-STATE_FILE="/opt/wojak-keeper/keeper-state.json"
-ACCOUNTS_FILE="/opt/wojak-keeper/keeper-accounts.json"
-KEYS_FILE="/opt/wojak-keeper/keeper-keys.json"
+STATE_FILE="/opt/dedoo-mm/keeper-state.json"
+ACCOUNTS_FILE="/opt/dedoo-mm/keeper-accounts.json"
+KEYS_FILE="/opt/dedoo-mm/keeper-keys.json"
 LOG_LEVEL="info"
 ```
 
 Permissions:
 
 ```bash
-chown wojakkeeper:wojakkeeper /opt/wojak-keeper/keeper.env
-chmod 600 /opt/wojak-keeper/keeper.env
+chown dedoo:dedoo /opt/dedoo-mm/dedoo-mm.env
+chmod 600 /opt/dedoo-mm/dedoo-mm.env
 ```
 
 When the env vault is configured, startup refuses to run unless:
@@ -230,7 +229,7 @@ API/UI come up. Then:
 3. add the operator's WIF under Wallets → Signing keys.
 
 The node starts signing as soon as a matching key is added. This avoids
-putting a WIF in `keeper.env` at all. All three operators must add the same
+putting a WIF in `dedoo-mm.env` at all. All three operators must add the same
 wallet definition.
 
 ## 5. Firewall
@@ -254,9 +253,9 @@ Never expose `API_LISTEN` publicly without TLS + auth.
 ## 6. Start and verify
 
 ```bash
-systemctl enable --now wojak-keeper
-systemctl status wojak-keeper --no-pager
-journalctl -u wojak-keeper -f
+systemctl enable --now dedoo-mm
+systemctl status dedoo-mm --no-pager
+journalctl -u dedoo-mm -f
 ```
 
 Expected:
@@ -329,21 +328,21 @@ The UI is designed for several multisig wallets on this one chain.
 ## 8. Backup and upgrade
 
 ```bash
-systemctl stop wojak-keeper
-cp /opt/wojak-keeper/keeper-state.json /root/keeper-state-$(date +%F).json
-cp /opt/wojak-keeper/keeper-accounts.json /root/keeper-accounts-$(date +%F).json
-cp /opt/wojak-keeper/keeper-keys.json /root/keeper-keys-$(date +%F).json  # secret
-systemctl start wojak-keeper
+systemctl stop dedoo-mm
+cp /opt/dedoo-mm/keeper-state.json /root/keeper-state-$(date +%F).json
+cp /opt/dedoo-mm/keeper-accounts.json /root/keeper-accounts-$(date +%F).json
+cp /opt/dedoo-mm/keeper-keys.json /root/keeper-keys-$(date +%F).json  # secret
+systemctl start dedoo-mm
 ```
 
 Upgrade:
 
 ```bash
-scp wojak-keeper root@YOUR_HOST:/root/
+scp dedoo-mm root@YOUR_HOST:/root/
 ssh root@YOUR_HOST
-install -m 0755 /root/wojak-keeper /opt/wojak-keeper/wojak-keeper.new
-mv -f /opt/wojak-keeper/wojak-keeper.new /opt/wojak-keeper/wojak-keeper
-systemctl restart wojak-keeper
+install -m 0755 /root/dedoo-mm /opt/dedoo-mm/dedoo-mm.new
+mv -f /opt/dedoo-mm/dedoo-mm.new /opt/dedoo-mm/dedoo-mm
+systemctl restart dedoo-mm
 ```
 
 Config, wallets, keys and proposals are preserved.
@@ -355,8 +354,8 @@ Config, wallets, keys and proposals are preserved.
 Basic checks:
 
 ```bash
-systemctl is-active wojak-keeper
-journalctl -u wojak-keeper -n 100 --no-pager
+systemctl is-active dedoo-mm
+journalctl -u dedoo-mm -n 100 --no-pager
 curl -u holder:PASSWORD -s http://127.0.0.1:8090/api/status | jq '{tipHeight, peers, balanceSats, utxoCount}'
 ```
 
@@ -366,9 +365,9 @@ see.
 
 Disaster recovery on a replacement host:
 
-1. Install the same package and restore `keeper.env` (0600).
+1. Install the same package and restore `dedoo-mm.env` (0600).
 2. Restore `keeper-state.json`, `keeper-accounts.json` and `keeper-keys.json`
-   from backup (0600, owned by `wojakkeeper`).
+   from backup (0600, owned by `dedoo`).
 3. Start the service and confirm the same wallet address and peers.
 4. If a WIF may have leaked, do **not** reuse it: create a new wallet with a
    fresh key ceremony and move funds with the old 2-of-3 approval.
@@ -379,7 +378,7 @@ Disaster recovery on a replacement host:
 
 - Never share or transmit a `KEEPER_WIF` or `keys.json`; each operator imports
   only their own key.
-- `keeper.env` and `keys.json` are `0600`, owned by `wojakkeeper`.
+- `dedoo-mm.env` and `keys.json` are `0600`, owned by `dedoo`.
 - Public host: keep the API on `127.0.0.1` and use an SSH tunnel or TLS
   reverse proxy. Trusted private LAN only: bind to the node's LAN IP and keep
   Basic Auth enabled.
@@ -402,7 +401,7 @@ Disaster recovery on a replacement host:
 | `watch-only` wallet | Add your WIF in Wallets → Signing keys |
 | `unknown wallet` on a proposal | The wallet was not added on this node |
 | 429 from electrs | Client retries; check endpoint |
-| Service exits after start | `journalctl -u wojak-keeper -n 50` |
+| Service exits after start | `journalctl -u dedoo-mm -n 50` |
 
 ---
 
