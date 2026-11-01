@@ -1,0 +1,24 @@
+[Unit]
+Description=Dedoo Multisig Manager keeper node
+Documentation=https://github.com/dedooxyz/dedoo-mm
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=wojakkeeper
+Group=wojakkeeper
+WorkingDirectory=/opt/wojak-keeper
+EnvironmentFile=/opt/wojak-keeper/keeper.env
+ExecStart=/opt/wojak-keeper/wojak-keeper
+Restart=on-failure
+RestartSec=5
+LimitNOFILE=65536
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/wojak-keeper
+
+[Install]
+WantedBy=multi-user.target

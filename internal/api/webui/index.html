@@ -1,0 +1,1026 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Dedoo Multisig Manager</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🧉</text></svg>">
+<style>
+:root{
+  --bg:#0b0d10;--sidebar:#0e1116;--panel:#12161d;--panel-2:#171c24;--line:#222934;--line-soft:#1a2029;
+  --text:#e7e9ed;--muted:#8b93a2;--faint:#5f6775;
+  --accent:#f0b429;--accent-ink:#16120a;--green:#3ddc97;--red:#ff6b6b;--blue:#6aa9ff;
+  --radius:6px;--sidebar-w:264px;
+  --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  --sans:Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{background:var(--bg);color:var(--text);font:14px/1.5 var(--sans);-webkit-font-smoothing:antialiased}
+a{color:inherit;text-decoration:none}
+button,input,textarea,select{font:inherit}
+button{cursor:pointer}
+::selection{background:#3a2f14;color:#fff}
+.mono{font-family:var(--mono);font-size:12.5px}
+.dim{color:var(--muted)}
+.faint{color:var(--faint)}
+.small{font-size:12px}
+.hidden{display:none!important}
+
+/* ---------- app shell ---------- */
+.app{min-height:100vh}
+.sidebar{position:fixed;inset:0 auto 0 0;width:var(--sidebar-w);background:var(--sidebar);border-right:1px solid var(--line-soft);display:flex;flex-direction:column;z-index:40}
+.brand{display:flex;align-items:center;gap:10px;padding:20px 20px 16px}
+.brand .mark{width:28px;height:28px;border:1px solid var(--line);background:#141922;display:grid;place-items:center;font-size:15px}
+.brand b{font-size:14px;letter-spacing:.02em}
+.brand span{display:block;font-size:10.5px;color:var(--faint);letter-spacing:.08em;text-transform:uppercase}
+
+.vaultbox{margin:4px 14px 14px;padding:14px;background:var(--panel);border:1px solid var(--line-soft);border-radius:var(--radius)}
+.vaultbox .k{font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--faint);margin-bottom:6px}
+.vaultbox .bal{font-size:22px;font-weight:650;letter-spacing:-.02em;font-variant-numeric:tabular-nums}
+.vaultbox .bal small{font-size:12px;color:var(--muted);font-weight:500;margin-left:4px}
+.vaultbox .addr{display:flex;align-items:center;gap:6px;margin-top:8px;color:var(--muted)}
+.vaultbox select{width:100%;margin:2px 0 8px;padding:6px 8px;font-size:12px;background:#0d1117}
+.vaultbox .addr .mono{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.iconbtn{background:none;border:0;color:var(--faint);padding:2px;display:inline-grid;place-items:center}
+.iconbtn:hover{color:var(--text)}
+.iconbtn svg{width:14px;height:14px}
+
+.nav{padding:4px 10px;display:flex;flex-direction:column;gap:2px;overflow-y:auto}
+.nav .label{padding:12px 12px 6px;font-size:10.5px;letter-spacing:.09em;text-transform:uppercase;color:var(--faint)}
+.nav a{display:flex;align-items:center;gap:10px;padding:8px 12px;border-left:2px solid transparent;color:var(--muted);border-radius:0 4px 4px 0}
+.nav a svg{width:16px;height:16px;flex:none;opacity:.8}
+.nav a:hover{color:var(--text);background:#121720}
+.nav a.active{color:var(--text);background:#151b24;border-left-color:var(--accent)}
+.nav a .count{margin-left:auto;font-size:11px;color:var(--accent);font-variant-numeric:tabular-nums}
+.nav a .count.zero{color:var(--faint)}
+
+.sidebar .foot{margin-top:auto;padding:14px 16px;border-top:1px solid var(--line-soft);font-size:11.5px;color:var(--muted)}
+.sidebar .foot .row{display:flex;align-items:center;gap:7px;padding:3px 0}
+.dot{width:7px;height:7px;border-radius:50%;background:var(--faint);flex:none}
+.dot.ok{background:var(--green)}
+.dot.warn{background:var(--accent)}
+.dot.bad{background:var(--red)}
+
+.main{margin-left:var(--sidebar-w);min-height:100vh;display:flex;flex-direction:column}
+.topbar{position:sticky;top:0;z-index:20;display:flex;align-items:center;gap:14px;padding:16px 32px;border-bottom:1px solid var(--line-soft);background:rgba(11,13,16,.92);backdrop-filter:blur(8px)}
+.topbar .titles{flex:1;min-width:0}
+.topbar h1{margin:0;font-size:19px;letter-spacing:-.02em}
+.topbar p{margin:1px 0 0;font-size:12.5px;color:var(--muted)}
+.topbar .tools{display:flex;align-items:center;gap:8px}
+.hamburger{display:none}
+.content{padding:28px 32px 56px;max-width:1180px;width:100%}
+.overlay{display:none}
+
+/* ---------- controls ---------- */
+.btn{display:inline-flex;align-items:center;gap:7px;border:1px solid var(--line);background:var(--panel);color:var(--text);padding:8px 13px;border-radius:var(--radius);font-size:13px}
+.btn:hover{border-color:#39424f;background:var(--panel-2)}
+.btn svg{width:15px;height:15px}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink);font-weight:600}
+.btn.primary:hover{background:#ffc84a;border-color:#ffc84a}
+.btn.approve{background:#12241b;border-color:#245039;color:var(--green);font-weight:550}
+.btn.approve:hover{background:#163022;border-color:#2f6a4b}
+.btn.reject{border-color:#4a2529;color:var(--red)}
+.btn.reject:hover{background:#241417;border-color:#6a3338}
+.btn.broadcast{background:#241d0e;border-color:#5a4718;color:var(--accent);font-weight:550}
+.btn.broadcast:hover{background:#2e2411;border-color:#7a6122}
+.btn:disabled{opacity:.42;cursor:not-allowed}
+.btn.sm{padding:5px 9px;font-size:12px}
+.btn.ghost{background:transparent;border-color:transparent;color:var(--muted)}
+.btn.ghost:hover{color:var(--text);background:#141922;border-color:var(--line-soft)}
+.btn.hamburger{display:none!important}
+button.hamburger{display:none!important}
+
+input,textarea,select{background:#0d1117;border:1px solid var(--line);border-radius:var(--radius);color:var(--text);padding:10px 12px;outline:none;width:100%}
+input:focus,textarea:focus,select:focus{border-color:#4a5462}
+label.field{display:block;margin:0 0 6px;font-size:12px;color:var(--muted)}
+.fieldwrap{margin-bottom:16px}
+.hint{font-size:12px;color:var(--faint);margin-top:6px}
+.inputrow{display:flex;gap:8px}
+.inputrow input{flex:1}
+
+/* ---------- overview ---------- */
+.hero{display:flex;flex-wrap:wrap;align-items:flex-end;gap:18px;justify-content:space-between;padding-bottom:22px;border-bottom:1px solid var(--line-soft)}
+.hero .balance{font-size:42px;line-height:1;letter-spacing:-.035em;font-weight:650;font-variant-numeric:tabular-nums}
+.hero .balance small{font-size:15px;color:var(--muted);font-weight:500;letter-spacing:0;margin-left:6px}
+.hero .sub{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-top:9px;color:var(--muted);font-size:12.5px}
+.hero .actions{display:flex;gap:8px;flex-wrap:wrap}
+
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:0;margin:24px 0 6px;border:1px solid var(--line-soft);border-radius:var(--radius);background:var(--panel)}
+.stat{padding:16px 18px;border-right:1px solid var(--line-soft)}
+.stat:last-child{border-right:0}
+.stat .k{font-size:11px;color:var(--faint);letter-spacing:.06em;text-transform:uppercase}
+.stat .v{font-size:26px;font-weight:650;letter-spacing:-.02em;margin-top:4px;font-variant-numeric:tabular-nums}
+.stat .v a{color:var(--accent)}
+.stat .s{font-size:11.5px;color:var(--muted)}
+
+.section{margin-top:30px}
+.section-head{display:flex;align-items:center;gap:10px;margin-bottom:10px}
+.section-head h2{margin:0;font-size:13px;letter-spacing:.07em;text-transform:uppercase;color:var(--muted);font-weight:600}
+.section-head .line{flex:1;height:1px;background:var(--line-soft)}
+.section-head a{font-size:12px;color:var(--accent)}
+
+/* ---------- proposal cards ---------- */
+.proposal{background:var(--panel);border:1px solid var(--line-soft);border-left:3px solid var(--line);border-radius:var(--radius);padding:16px 18px;margin-bottom:10px}
+.proposal.st-ready{border-left-color:var(--accent)}
+.proposal.st-broadcasted{border-left-color:var(--green)}
+.proposal.st-rejected{border-left-color:var(--red)}
+.proposal.st-pending,.proposal.st-signed{border-left-color:var(--blue)}
+.ph{display:flex;flex-wrap:wrap;align-items:center;gap:10px}
+.status{display:inline-flex;align-items:center;gap:6px;font-size:11px;letter-spacing:.05em;text-transform:uppercase;color:var(--muted)}
+.status .dot{width:6px;height:6px;border-radius:1px}
+.status.pending .dot,.status.signed .dot{background:var(--blue)}
+.status.ready .dot{background:var(--accent)}
+.status.broadcasted .dot{background:var(--green)}
+.status.rejected .dot{background:var(--red)}
+.pid{font-family:var(--mono);font-size:12px;color:var(--faint)}
+.ph .time{margin-left:auto;font-size:12px;color:var(--faint)}
+.intent{display:grid;grid-template-columns:minmax(0,2.2fr) minmax(0,1fr) minmax(0,1.2fr);gap:14px;margin-top:14px}
+.intent .k{font-size:11px;color:var(--faint);text-transform:uppercase;letter-spacing:.05em;margin-bottom:3px}
+.intent .v{font-size:14px;overflow-wrap:anywhere}
+.intent .v.amount{font-size:17px;font-weight:650;letter-spacing:-.01em;font-variant-numeric:tabular-nums}
+.sigline{display:flex;align-items:center;gap:8px;margin-top:13px;font-size:12px;color:var(--muted)}
+.sigdots{display:flex;gap:4px}
+.sigdots i{width:18px;height:4px;border-radius:1px;background:#2a3240}
+.sigdots i.on{background:var(--green)}
+.sigdots i.me{background:var(--accent)}
+.chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
+.chip{font-size:11.5px;border:1px solid #3a2326;color:var(--red);padding:2px 7px;border-radius:3px;background:#1b1012;max-width:100%;overflow-wrap:anywhere}
+.verr{margin-top:11px;background:#201012;border:1px solid #482126;color:#ffb3b3;border-radius:4px;padding:9px 11px;font-size:12.5px}
+.pactions{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px}
+.details{margin-top:12px;border-top:1px dashed var(--line-soft);padding-top:10px}
+.details summary{cursor:pointer;color:var(--muted);font-size:12px}
+.dgrid{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:12px}
+.dgrid h4{margin:0 0 6px;font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--faint)}
+table{width:100%;border-collapse:collapse;font-size:12.5px}
+th{font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--faint);font-weight:500;text-align:left;padding:7px 8px;border-bottom:1px solid var(--line-soft)}
+td{padding:8px;border-bottom:1px solid var(--line-soft);vertical-align:top;overflow-wrap:anywhere}
+tr:last-child td{border-bottom:0}
+.empty{padding:22px 0;color:var(--faint);font-size:13px}
+
+/* ---------- transfer ---------- */
+.transfer-grid{display:grid;grid-template-columns:minmax(0,1.55fr) minmax(0,1fr);gap:26px;align-items:start}
+.panel{background:var(--panel);border:1px solid var(--line-soft);border-radius:var(--radius)}
+.panel .body{padding:20px}
+.panel .head{padding:14px 20px;border-bottom:1px solid var(--line-soft);font-size:12px;color:var(--muted);letter-spacing:.06em;text-transform:uppercase}
+.formrow{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.amountbig{font-size:24px;font-weight:650;font-variant-numeric:tabular-nums}
+.summary .row{display:flex;justify-content:space-between;gap:12px;padding:8px 0;border-bottom:1px solid var(--line-soft);font-size:13px}
+.summary .row:last-child{border-bottom:0}
+.summary .row .k{color:var(--muted)}
+.steps{counter-reset:step;margin:0;padding:0;list-style:none}
+.steps li{position:relative;padding:0 0 14px 26px;font-size:12.5px;color:var(--muted)}
+.steps li:before{counter-increment:step;content:counter(step);position:absolute;left:0;top:0;width:18px;height:18px;border:1px solid var(--line);border-radius:50%;display:grid;place-items:center;font-size:10.5px;color:var(--faint)}
+.steps li:after{content:"";position:absolute;left:9px;top:20px;bottom:2px;width:1px;background:var(--line-soft)}
+.steps li:last-child:after{display:none}
+.steps b{color:var(--text);font-weight:550}
+
+/* ---------- history ---------- */
+.toolbar{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-bottom:14px}
+.tabs{display:flex;gap:2px;border-bottom:1px solid var(--line-soft)}
+.tab{background:none;border:0;border-bottom:2px solid transparent;color:var(--muted);padding:8px 12px;font-size:13px}
+.tab.active{color:var(--text);border-bottom-color:var(--accent)}
+.tab:hover{color:var(--text)}
+.search{max-width:320px}
+.hist-table tr.clickable{cursor:pointer}
+.hist-table tr.clickable:hover td{background:#121720}
+.hist-detail td{background:#0f1319;padding:0}
+.hist-detail .inner{padding:14px 16px}
+.txid{font-family:var(--mono);font-size:12px;color:var(--muted);overflow-wrap:anywhere}
+.copy-inline{display:inline-flex;align-items:center;gap:5px}
+.status-label{display:inline-flex;align-items:center;gap:6px;font-size:12px}
+.status-label i{width:6px;height:6px;display:inline-block;border-radius:1px}
+.st-broadcasted{color:var(--green)}.st-broadcasted i{background:var(--green)}
+.st-rejected{color:var(--red)}.st-rejected i{background:var(--red)}
+.st-ready{color:var(--accent)}.st-ready i{background:var(--accent)}
+.st-pending,.st-signed{color:var(--blue)}.st-pending i,.st-signed i{background:var(--blue)}
+.st-broadcast-error{color:var(--red)}.st-broadcast-error i{background:var(--red)}
+
+/* ---------- vault / node ---------- */
+.kv{display:grid;grid-template-columns:180px minmax(0,1fr);border-top:1px solid var(--line-soft)}
+.kv .k{padding:10px 0;color:var(--muted);font-size:12.5px;border-bottom:1px solid var(--line-soft)}
+.kv .v{padding:10px 0;border-bottom:1px solid var(--line-soft);overflow-wrap:anywhere;font-size:13px}
+
+.toasts{position:fixed;right:18px;bottom:18px;z-index:80;display:flex;flex-direction:column;gap:8px}
+.toast{background:#161c25;border:1px solid var(--line);border-left:3px solid var(--blue);padding:10px 14px;border-radius:5px;max-width:420px;font-size:12.5px;box-shadow:0 10px 30px rgba(0,0,0,.45)}
+.toast.ok{border-left-color:var(--green)}
+.toast.err{border-left-color:var(--red)}
+
+
+/* ---------- wallet manager ---------- */
+.notice{border:1px solid #3b3015;background:#171307;color:#d9c9a0;padding:10px 12px;border-radius:4px;font-size:12.5px;margin:12px 0;line-height:1.5}
+.badge-active{color:var(--green);border:1px solid #245039;background:#12241b;padding:1px 6px;border-radius:3px;font-size:10.5px;text-transform:uppercase;letter-spacing:.05em;white-space:nowrap}
+.walletform .grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
+.walletform .grid5{display:grid;grid-template-columns:repeat(5,1fr);gap:10px}
+.walletform textarea{min-height:84px;resize:vertical}
+.codebox{font-family:var(--mono);font-size:11.5px;color:var(--muted);background:#0d1117;border:1px solid var(--line);border-radius:4px;padding:10px;white-space:pre-wrap;word-break:break-all;margin-top:8px;max-height:220px;overflow:auto}
+.wallet-actions{display:flex;gap:6px;flex-wrap:wrap}
+@media (max-width:980px){.walletform .grid3,.walletform .grid5{grid-template-columns:1fr 1fr}}
+@media (max-width:560px){.walletform .grid3,.walletform .grid5{grid-template-columns:1fr}}
+
+
+.table-scroll{overflow-x:auto}
+.wallet-table .actions-cell{white-space:nowrap}
+@media(max-width:700px){
+  .wallet-table thead{display:none}
+  .wallet-table,.wallet-table tbody,.wallet-table tr,.wallet-table td{display:block;width:100%}
+  .wallet-table tr{border-bottom:1px solid var(--line-soft);padding:12px 14px}
+  .wallet-table tr:last-child{border-bottom:0}
+  .wallet-table td{border:0;padding:3px 0;display:flex;justify-content:space-between;gap:12px;text-align:right}
+  .wallet-table td:before{content:attr(data-label);color:var(--faint);font-size:11px;letter-spacing:.05em;text-transform:uppercase;text-align:left;flex:none}
+  .wallet-table td.actions-cell{justify-content:flex-end;padding-top:9px}
+  .wallet-table td.actions-cell:before{display:none}
+  .hist-table{min-width:640px}
+}
+
+/* ---------- responsive ---------- */
+@media (max-width:980px){
+  .stats{grid-template-columns:1fr 1fr}
+  .stat:nth-child(2){border-right:0}
+  .stat{border-bottom:1px solid var(--line-soft)}
+  .stat:nth-child(3),.stat:nth-child(4){border-bottom:0}
+  .transfer-grid{grid-template-columns:1fr}
+  .intent{grid-template-columns:1fr 1fr}
+}
+@media (max-width:860px){
+  .sidebar{transform:translateX(-100%);transition:transform .18s ease;box-shadow:20px 0 50px rgba(0,0,0,.5)}
+  body.nav-open .sidebar{transform:none}
+  body.nav-open .overlay{display:block;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:30}
+  .main{margin-left:0}
+  .btn.hamburger,button.hamburger{display:inline-flex!important}
+  .topbar{padding:14px 18px}
+  .content{padding:20px 18px 48px}
+  .hero .balance{font-size:34px}
+}
+@media (max-width:560px){
+  .stats{grid-template-columns:1fr}
+  .stat{border-right:0;border-bottom:1px solid var(--line-soft)}
+  .stat:last-child{border-bottom:0}
+  .intent{grid-template-columns:1fr}
+  .formrow{grid-template-columns:1fr}
+  .dgrid{grid-template-columns:1fr}
+  .kv{grid-template-columns:1fr}
+  .kv .k{padding-bottom:2px;border-bottom:0}
+}
+</style>
+</head>
+<body>
+<div class="app">
+  <aside class="sidebar">
+    <div class="brand">
+      <div class="mark">D</div>
+      <div><b>Dedoo</b><span>Multisig Manager</span></div>
+    </div>
+    <div class="vaultbox" id="vaultbox"></div>
+    <nav class="nav" id="nav"></nav>
+    <div class="foot" id="sidefoot"></div>
+  </aside>
+  <div class="overlay" onclick="toggleNav(false)"></div>
+  <div class="main">
+    <header class="topbar">
+      <button class="btn ghost hamburger" onclick="toggleNav(true)" aria-label="Open menu">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+      </button>
+      <div class="titles"><h1 id="pageTitle">Overview</h1><p id="pageSub">Vault status and approval queue</p></div>
+      <div class="tools">
+        <button class="btn sm" onclick="refresh(true)" title="Refresh status">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M20 11a8 8 0 1 0-.6 3M20 4v7h-7"/></svg>
+          Refresh
+        </button>
+        <label class="small dim" style="display:flex;align-items:center;gap:6px;margin-left:4px">
+          <input type="checkbox" id="auto" checked style="width:auto"> auto
+        </label>
+      </div>
+    </header>
+    <main class="content" id="view"></main>
+  </div>
+</div>
+<div class="toasts" id="toasts"></div>
+
+<script>
+const S = {
+  status: null, proposals: [], utxos: null, error: null,
+  view: "overview", draft: {to: "", amount: "", memo: ""},
+  historyFilter: "all", historyQuery: "", open: new Set(),
+  wallet: localStorage.getItem("dedoo.wallet") || "",
+  accounts: [], keys: [], showCreateWallet: false,
+  walletDraft: {name:"", wif:"", source:"keys", pubs:["","",""], order:"0,1,2", required:"2", redeem:""},
+  loading: false
+};
+const $ = (html) => document.createRange().createContextualFragment(html);
+const q = (sel) => document.querySelector(sel);
+const el = (id) => document.getElementById(id);
+
+const ICONS = {
+  overview: '<path d="M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z"/>',
+  send: '<path d="M5 19L19 5M9 5h10v10"/>',
+  check: '<path d="M9 11l3 3 8-8M4 12v7a1 1 0 0 0 1 1h7"/>',
+  clock: '<circle cx="12" cy="12" r="8"/><path d="M12 8v4l3 2"/>',
+  history: '<path d="M3 12a9 9 0 1 0 3-6.7M3 4v5h5"/><path d="M12 8v4l3 2"/>',
+  vault: '<rect x="4" y="6" width="16" height="13" rx="1.5"/><path d="M8 6V4h8v2M12 12v3M8 12h8"/>',
+  node: '<rect x="4" y="4" width="16" height="7" rx="1.5"/><rect x="4" y="13" width="16" height="7" rx="1.5"/><path d="M7 7.5h.01M7 16.5h.01"/>',
+  copy: '<rect x="9" y="9" width="11" height="11" rx="1.5"/><path d="M5 15V5a1 1 0 0 1 1-1h9"/>',
+  menu: '<path d="M4 7h16M4 12h16M4 17h16"/>',
+  external: '<path d="M14 4h6v6M20 4l-9 9"/><path d="M19 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h5"/>'
+};
+function icon(name){
+  return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">${ICONS[name]||""}</svg>`;
+}
+function coinUnit(){
+  const c = S.status && S.status.config && S.status.config.chainName || "";
+  return c.indexOf("junkcoin") >= 0 ? "JKC" : "WJK";
+}
+function coin(sats){
+  if(sats===undefined||sats===null||isNaN(sats)) return "—";
+  return (Number(sats)/1e8).toLocaleString("en-US",{maximumFractionDigits:8}) + " " + coinUnit();
+}
+function sats(n){
+  return (n===undefined||n===null)? "—" : Number(n).toLocaleString("en-US") + " sats";
+}
+function short(h,n){ n=n||8; if(!h) return "—"; return h.slice(0,n)+"…"+h.slice(-4); }
+function esc(v){ return String(v===undefined||v===null?"":v).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
+function ago(t){
+  if(!t) return "";
+  const s=(Date.now()-new Date(t))/1000;
+  if(s<90) return Math.floor(s)+"s ago";
+  if(s<5400) return Math.floor(s/60)+"m ago";
+  if(s<172800) return Math.floor(s/3600)+"h ago";
+  return Math.floor(s/86400)+"d ago";
+}
+function copy(text, label){
+  navigator.clipboard.writeText(text).then(()=>toast((label||"Copied"),"ok")).catch(()=>{});
+}
+function toast(msg, cls){
+  const node=$(`<div class="toast ${cls||""}"></div>`); node.textContent=msg;
+  el("toasts").appendChild(node);
+  setTimeout(()=>node.remove(), 5000);
+}
+
+async function api(path, opt){
+  const r = await fetch(path, opt);
+  let body=null;
+  try{ body = await r.json(); }catch(e){ body = {error:"HTTP "+r.status}; }
+  if(!r.ok) throw new Error((body && body.error) || ("HTTP "+r.status));
+  return body;
+}
+
+async function load(manual){
+  S.loading = true;
+  try{
+    const [accs, ks] = await Promise.all([api("/api/accounts"), api("/api/keys")]);
+    S.accounts = accs.accounts || []; S.keys = ks.keys || [];
+    if(!S.wallet || !S.accounts.some(a=>a.address===S.wallet)){
+      const active=S.accounts.find(a=>a.active)||S.accounts[0];
+      S.wallet=active?active.address:"";
+    }
+    if(S.wallet) localStorage.setItem("dedoo.wallet", S.wallet);
+    const q = S.wallet ? "?wallet="+encodeURIComponent(S.wallet) : "";
+    const [st, ps] = await Promise.all([api("/api/status"+q), api("/api/proposals")]);
+    S.status = st; S.proposals = ps.proposals || []; S.error = null;
+    if(S.view === "vault" && S.utxos === null) await loadUTXOs();
+    const ae=document.activeElement;
+    const typing=!manual && ae && ae.matches && (ae.closest("#tform") || ae.closest(".walletform") || ae.classList.contains("search"));
+    if(typing) renderSidebar(); else render();
+    if(manual) toast("Status refreshed","ok");
+  }catch(e){
+    S.error = e.message;
+    render();
+    if(manual) toast("Load failed: "+e.message,"err");
+  }finally{ S.loading=false; }
+}
+async function loadUTXOs(){
+  try{ const r = await api("/api/utxos?wallet="+encodeURIComponent(S.wallet)); S.utxos = r.utxos || []; }
+  catch(e){ S.utxos = []; toast("UTXO load failed: "+e.message,"err"); }
+}
+
+function selectedAccount(){
+  return S.accounts.find(a=>a.address===S.wallet) || null;
+}
+function switchWallet(addr){
+  S.wallet=addr; localStorage.setItem("dedoo.wallet",addr); S.utxos=null;
+  load(false); navigate("overview");
+}
+function filters(){
+  const P = S.proposals.filter(p=>!S.wallet || p.vault===S.wallet);
+  const mine = P.filter(p=>["pending","signed-partial"].includes(p.status) && !p.mySigned && p.status!=="verify-rejected");
+  const others = P.filter(p=>["pending","signed-partial"].includes(p.status) && p.mySigned);
+  const ready = P.filter(p=>(p.status==="ready"||p.status==="broadcast-error") && !p.broadcasted);
+  const history = P.filter(p=>p.broadcasted || p.status==="verify-rejected");
+  const classified = new Set([...mine,...others,...ready,...history].map(p=>p.proposalId));
+  const other = P.filter(p=>!classified.has(p.proposalId));
+  return {mine, others, ready, history, other};
+}
+
+const VIEW_META = {
+  overview: ["Overview","Vault status and approval queue"],
+  transfer: ["New transfer","Build a 2-of-3 proposal for co-signing"],
+  approvals: ["Approvals","Verify and sign pending proposals"],
+  wallets: ["Wallets","Create and manage multisig wallets"],
+  history: ["History","Broadcast and rejected transaction record"],
+  vault: ["Vault","Address, balance and unspent outputs"],
+  node: ["Node","Signing identity, peers and runtime configuration"]
+};
+function currentView(){
+  const h=(location.hash||"").replace(/^#\/?/,"");
+  return VIEW_META[h] ? h : "overview";
+}
+function navigate(v){
+  if(!VIEW_META[v]) v="overview";
+  if(location.hash !== "#/"+v) location.hash = "#/"+v;
+  else { S.view=v; render(); }
+  toggleNav(false);
+}
+function toggleNav(open){
+  document.body.classList.toggle("nav-open", !!open);
+}
+window.addEventListener("hashchange", ()=>{ S.view=currentView(); render(); });
+
+/* ---------- sidebar ---------- */
+function renderSidebar(){
+  const st=S.status, f=filters(), cfg=st && st.config || {};
+  el("vaultbox").innerHTML = st ? `
+    <div class="k">${cfg.chainName || "chain"} · wallet</div>
+    ${S.accounts.length?`<select onchange="switchWallet(this.value)">
+      ${S.accounts.map(a=>`<option value="${esc(a.address)}" ${a.address===S.wallet?'selected':''}>${esc(a.name)}${a.hasKey?'':' (watch-only)'}</option>`).join("")}
+    </select>`:`<div class="small dim" style="margin:2px 0 8px">No wallet — create one in Wallets</div>`}
+    <div class="bal">${coin(st.balanceSats)}<small>${st.utxoCount} UTXO</small></div>
+    <div class="addr"><span class="mono">${short(cfg.vaultAddress,10)}</span>
+      <button class="iconbtn" title="Copy vault address" onclick="copy('${cfg.vaultAddress}','Wallet address copied')">${icon("copy")}</button>
+      ${cfg.walletHasKey?'':'<span class="small" style="color:var(--accent)">watch-only</span>'}
+    </div>` : `<div class="k">wallet</div><div class="dim small">connecting…</div>`;
+
+  const items = [
+    ["overview","Overview","overview",0],
+    ["transfer","New transfer","send",0],
+    ["approvals","Approvals","check",f.mine.length],
+    ["ready","Ready to broadcast","clock",f.ready.length],
+    ["wallets","Wallets","vault",0],
+    ["history","History","history",0],
+    ["vault","Vault","vault",0],
+    ["node","Node","node",0]
+  ];
+  const isActive=(id)=>{
+    if(id==="ready") return S.view==="approvals" && S.approvalsTab==="ready";
+    if(id==="approvals") return S.view==="approvals" && S.approvalsTab!=="ready";
+    return S.view===id;
+  };
+  const navLink=([id,label,ic,count])=>{
+    const href = id==="ready" ? "#/approvals" : "#/"+id;
+    const click = id==="ready" ? `onclick="S.approvalsTab='ready'; if(S.view==='approvals') render()"`
+      : id==="approvals" ? `onclick="S.approvalsTab='mine'; if(S.view==='approvals') render()"` : "";
+    return `<a href="${href}" class="${isActive(id)?'active':''}" ${click}>${icon(ic)}<span>${label}</span>${count?`<span class="count">${count}</span>`:''}</a>`;
+  };
+  el("nav").innerHTML = `<div class="label">Wallet</div>` +
+    items.slice(0,4).map(navLink).join("") +
+    `<div class="label">Manage</div>` + items.slice(4).map(navLink).join("");
+
+  const peers = st ? (st.peers||[]).length : 0;
+  const tip = st ? st.tipHeight : "—";
+  el("sidefoot").innerHTML = `
+    <div class="row"><span class="dot ${peers>=2?'ok':peers===1?'warn':'bad'}"></span>${peers} peer${peers===1?'':'s'} connected</div>
+    <div class="row"><span class="dot ok"></span>chain tip ${tip}</div>
+    <div class="row"><span class="dot ${st&&st.self&&st.self.autoSign?'warn':'ok'}"></span>${st&&st.self&&st.self.autoSign?'auto-sign':'manual signing'}</div>`;
+}
+
+/* ---------- proposal card ---------- */
+function statusClass(p){
+  if(p.status==="verify-rejected") return "rejected";
+  if(p.status==="broadcasted") return "broadcasted";
+  if(p.status==="ready"||p.status==="broadcast-error") return "ready";
+  if(p.status==="signed-partial") return "signed";
+  return "pending";
+}
+function statusLabel(p){
+  return ({
+    "pending":"Pending", "signed-partial":"Partially signed", "ready":"Ready",
+    "broadcasted":"Broadcast", "broadcast-error":"Broadcast failed", "verify-rejected":"Rejected"
+  })[p.status] || p.status;
+}
+function proposalCard(p){
+  const cls=statusClass(p), open=S.open.has(p.proposalId), req=(S.status&&S.status.config.requiredSignatures)||2;
+  const signed=(p.signedBy||[]).length;
+  const myPubs=[S.status.self.pubkey,...(S.keys||[]).map(k=>k.pubkey)];
+  const mineSigned=(p.signedBy||[]).some(k=>myPubs.includes(k));
+  const dots=Array.from({length:req},(_,i)=>`<i class="${i<signed?(mineSigned?'me':'on'):''}"></i>`).join("");
+  const canSign=!!(S.status.config&&S.status.config.walletHasKey);
+  const rejects=Object.entries(p.rejects||{}).map(([k,v])=>`<span class="chip">Rejected by ${short(k,6)}: ${esc(v)}</span>`).join("");
+  let actions="";
+  if(["pending","signed-partial"].includes(p.status) && !p.mySigned){
+    if(canSign){
+      actions=`<button class="btn approve" onclick="act('${p.proposalId}','approve')">${icon("check")} Approve &amp; sign</button>
+               <button class="btn reject" onclick="act('${p.proposalId}','reject')">Reject</button>`;
+    } else {
+      actions=`<span class="small" style="color:var(--accent)">watch-only — add a signing key in Wallets</span>`;
+    }
+  } else if(p.status==="ready"||p.status==="broadcast-error"){
+    actions=`<button class="btn broadcast" onclick="act('${p.proposalId}','broadcast')">${icon("send")} Broadcast to chain</button>`;
+  } else if(p.status==="broadcasted"){
+    actions=`<span class="small dim">txid <span class="mono">${p.broadcastTxid||p.txid}</span></span>`;
+  }
+  const details = open ? `
+    <div class="details"><div class="dgrid">
+      <div><h4>Inputs (${(p.inputs||[]).length})</h4><table><thead><tr><th>Txid</th><th>Vout</th></tr></thead><tbody>
+        ${(p.inputs||[]).map(i=>`<tr><td class="mono">${short(i.txid,14)}</td><td>${i.vout}</td></tr>`).join("")}
+      </tbody></table></div>
+      <div><h4>Outputs (${(p.outputs||[]).length})</h4><table><thead><tr><th>To</th><th>Amount</th></tr></thead><tbody>
+        ${(p.outputs||[]).map(o=>`<tr><td class="mono">${o.to?short(o.to,14):"OP_RETURN"}</td><td>${coin(o.valueSats)}</td></tr>`).join("")}
+      </tbody></table></div>
+    </div>
+    <div class="hint" style="margin-top:12px;display:flex;gap:10px;flex-wrap:wrap">
+      <span>Proposal <span class="mono">${p.proposalId}</span></span>
+      <span>Raw tx <span class="mono">${short(p.rawHex,18)}</span></span>
+      <button class="btn ghost sm" onclick="copy('${p.rawHex||''}','Raw tx copied')">Copy raw</button>
+    </div></div>` : "";
+  return `<article class="proposal st-${cls}" id="P-${p.proposalId}">
+    <div class="ph">
+      <span class="status ${cls}"><span class="dot"></span>${statusLabel(p)}</span>
+      <span class="pid">${p.proposalId}</span>
+      <span class="time">${ago(p.created)}</span>
+    </div>
+    <div class="intent">
+      <div><div class="k">Destination</div><div class="v mono">${p.to?esc(p.to):"—"}</div></div>
+      <div><div class="k">Amount</div><div class="v amount">${coin(p.amountSats)}</div><div class="small faint">${sats(p.amountSats)}</div></div>
+      <div><div class="k">Memo</div><div class="v">${p.memo?esc(p.memo):"—"}</div></div>
+    </div>
+    <div class="sigline"><span class="sigdots">${dots}</span> ${signed} of ${req} signatures
+      ${p.mySigned?'<span class="small" style="color:var(--accent)">· you signed</span>':''}</div>
+    ${rejects?`<div class="chips">${rejects}</div>`:""}
+    ${p.verifyErr?`<div class="verr">Local verification failed: ${esc(p.verifyErr)}. This node will not sign.</div>`:""}
+    ${p.broadcastErr?`<div class="verr">Broadcast error: ${esc(p.broadcastErr)}. Retry allowed.</div>`:""}
+    <div class="pactions">${actions}
+      <button class="btn ghost sm" onclick="toggleProposal('${p.proposalId}')">${open?"Hide details":"Verify details"}</button>
+      ${p.txid?`<button class="btn ghost sm" onclick="copy('${p.txid}','Txid copied')">Copy txid</button>`:""}
+    </div>
+    ${details}
+  </article>`;
+}
+function toggleProposal(id){
+  if(S.open.has(id)) S.open.delete(id); else S.open.add(id);
+  render();
+}
+
+/* ---------- overview ---------- */
+function overviewHTML(){
+  const st=S.status, f=filters();
+  const recent=f.history.slice(0,5);
+  return `
+  <div class="hero">
+    <div>
+      <div class="balance">${coin(st.balanceSats)}<small>${st.utxoCount} UTXO</small></div>
+      <div class="sub">
+        <span class="mono">${short(st.config.vaultAddress,14)}</span>
+        <button class="iconbtn" title="Copy address" onclick="copy('${st.config.vaultAddress}','Vault address copied')">${icon("copy")}</button>
+        <span>·</span><span>${st.config.chainName}</span>
+        <span>·</span><span>${st.config.requiredSignatures}-of-3</span>
+      </div>
+    </div>
+    <div class="actions">
+      <button class="btn primary" onclick="navigate('transfer')">${icon("send")} New transfer</button>
+      <button class="btn" onclick="consolidate()">${icon("vault")} Consolidate</button>
+    </div>
+  </div>
+
+  <div class="stats">
+    <div class="stat"><div class="k">Needs your signature</div><div class="v">${f.mine.length}</div><div class="s"><a href="#/approvals" onclick="S.approvalsTab='mine'">Review queue</a></div></div>
+    <div class="stat"><div class="k">Waiting for co-signers</div><div class="v">${f.others.length}</div><div class="s">proposals you signed</div></div>
+    <div class="stat"><div class="k">Ready to broadcast</div><div class="v">${f.ready.length}</div><div class="s"><a href="#/approvals" onclick="S.approvalsTab='ready'">Broadcast queue</a></div></div>
+    <div class="stat"><div class="k">Historical record</div><div class="v">${f.history.length}</div><div class="s"><a href="#/history">View history</a></div></div>
+  </div>
+
+  <div class="section">
+    <div class="section-head"><h2>Recent activity</h2><span class="line"></span><a href="#/history">Open history</a></div>
+    ${recent.length?historyTable(recent,false):`<div class="empty">No broadcast or rejected proposals yet.</div>`}
+  </div>`;
+}
+
+/* ---------- transfer ---------- */
+function transferHTML(){
+  const st=S.status, cfg=st.config, acct=selectedAccount();
+  const canSign=!!acct && !!cfg.walletHasKey;
+  return `
+  ${!acct?`<div class="notice">No wallet exists on this node yet. Create one in <a href="#/wallets" style="color:var(--accent)">Wallets</a>, then add your private key.</div>`:canSign?'':`<div class="notice">This wallet is watch-only on this node. Add its private key in <a href="#/wallets" style="color:var(--accent)">Wallets → Signing keys</a> before creating a proposal.</div>`}
+  <div class="transfer-grid">
+    <section class="panel">
+      <div class="head">Transfer proposal</div>
+      <div class="body">
+        <form id="tform" onsubmit="submitTransfer(event)">
+          <div class="fieldwrap">
+            <label class="field">Destination address</label>
+            <input name="to" value="${esc(S.draft.to)}" placeholder="Wallet or vault address" autocomplete="off" oninput="S.draft.to=this.value">
+          </div>
+          <div class="formrow">
+            <div class="fieldwrap">
+              <label class="field">Amount (sats)</label>
+              <input name="sats" type="number" min="1" value="${S.draft.amount}" placeholder="e.g. 30000000" oninput="S.draft.amount=this.value">
+              <div class="hint" id="amountHint">&nbsp;</div>
+            </div>
+            <div class="fieldwrap">
+              <label class="field">Memo (optional)</label>
+              <input name="memo" value="${esc(S.draft.memo)}" placeholder="Reference for co-signers" oninput="S.draft.memo=this.value">
+            </div>
+          </div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:4px">
+            <button class="btn primary" type="submit" ${canSign?"":"disabled"}>${icon("send")} Create proposal</button>
+            <button class="btn" type="button" onclick="consolidate()">${icon("vault")} Consolidate vault</button>
+          </div>
+        </form>
+      </div>
+    </section>
+
+    <aside>
+      <section class="panel summary">
+        <div class="head">Vault</div>
+        <div class="body">
+          <div class="row"><span class="k">Wallet</span><span>${esc(acct?acct.name:cfg.walletName||"—")}</span></div>
+          <div class="row"><span class="k">Available</span><span>${coin(st.balanceSats)}</span></div>
+          <div class="row"><span class="k">UTXO</span><span>${st.utxoCount}</span></div>
+          <div class="row"><span class="k">Minimum</span><span>${sats(cfg.minTransferSats)}</span></div>
+          <div class="row"><span class="k">Max inputs / tx</span><span>${cfg.maxTxInputs}</span></div>
+          <div class="row"><span class="k">Maturity</span><span>${cfg.coinbaseMaturity} conf</span></div>
+          <div class="hint" style="margin-top:10px">The network fee is calculated by the keeper when the proposal is built. Change, if any, returns to this vault.</div>
+        </div>
+      </section>
+      <section class="panel" style="margin-top:14px">
+        <div class="head">Approval flow</div>
+        <div class="body">
+          <ol class="steps">
+            <li><b>Create proposal</b><br>Your node builds and signs the transaction.</li>
+            <li><b>Collect ${cfg.requiredSignatures} signatures</b><br>The other holders verify in their own UI.</li>
+            <li><b>Broadcast</b><br>Any holder pushes the signed tx to the chain.</li>
+          </ol>
+        </div>
+      </section>
+    </aside>
+  </div>`;
+}
+
+/* ---------- approvals ---------- */
+function approvalsHTML(){
+  const f=filters();
+  const tab=S.approvalsTab||"mine";
+  const lists={mine:f.mine, others:f.others, ready:f.ready};
+  const rows=lists[tab]||[];
+  const tabs=[["mine","Needs my signature",f.mine.length],["others","Waiting for co-signers",f.others.length],["ready","Ready to broadcast",f.ready.length]];
+  return `
+  <div class="toolbar">
+    <div class="tabs">${tabs.map(([id,label,count])=>`<button class="tab ${tab===id?'active':''}" onclick="S.approvalsTab='${id}';render()">${label}${count?` (${count})`:""}</button>`).join("")}</div>
+  </div>
+  ${rows.length?rows.map(proposalCard).join(""):`<div class="empty">Nothing in this queue.</div>`}
+  ${f.other.length?`<div class="section"><div class="section-head"><h2>Other</h2><span class="line"></span></div>${f.other.map(proposalCard).join("")}</div>`:""}`;
+}
+
+/* ---------- history ---------- */
+function historyRows(){
+  let rows=S.proposals.filter(p=>p.broadcasted || p.status==="verify-rejected");
+  if(S.historyFilter==="broadcasted") rows=rows.filter(p=>p.broadcasted);
+  if(S.historyFilter==="rejected") rows=rows.filter(p=>p.status==="verify-rejected");
+  const qq=S.historyQuery.trim().toLowerCase();
+  if(qq) rows=rows.filter(p=>[p.proposalId,p.to,p.txid,p.broadcastTxid,p.memo].filter(Boolean).some(v=>String(v).toLowerCase().includes(qq)));
+  return rows;
+}
+function statusLabelHTML(p){
+  const cls=statusClass(p);
+  return `<span class="status-label st-${cls}"><i></i>${statusLabel(p)}</span>`;
+}
+function historyTable(rows, detailed){
+  return `<div class="table-scroll"><table class="hist-table">
+    <thead><tr><th>Time</th><th>Destination</th><th>Amount</th><th>Status</th><th>Transaction</th></tr></thead>
+    <tbody>${rows.map(p=>`
+      <tr class="clickable" onclick="toggleProposal('${p.proposalId}')">
+        <td class="dim small">${ago(p.created)}</td>
+        <td class="mono">${p.to?esc(short(p.to,18)):"—"}</td>
+        <td>${coin(p.amountSats)}</td>
+        <td>${statusLabelHTML(p)}</td>
+        <td class="mono">${p.broadcastTxid?short(p.broadcastTxid,16):(p.txid?short(p.txid,16):"—")}</td>
+      </tr>
+      ${S.open.has(p.proposalId)?`<tr class="hist-detail"><td colspan="5"><div class="inner">${proposalCard(p)}</div></td></tr>`:""}
+    `).join("")}</tbody></table></div>`;
+}
+function historyHTML(){
+  const rows=historyRows();
+  return `
+  <div class="toolbar">
+    <div class="tabs">
+      ${[["all","All"],["broadcasted","Broadcast"],["rejected","Rejected"]].map(([id,label])=>
+        `<button class="tab ${S.historyFilter===id?'active':''}" onclick="S.historyFilter='${id}';render()">${label}</button>`).join("")}
+    </div>
+    <span style="flex:1"></span>
+    <input class="search" placeholder="Search address, txid, memo…" value="${esc(S.historyQuery)}"
+      oninput="S.historyQuery=this.value; renderHistoryOnly()">
+  </div>
+  ${rows.length?historyTable(rows,true):`<div class="empty">No proposals match this filter.</div>`}`;
+}
+function renderHistoryOnly(){
+  el("view").innerHTML=historyHTML();
+  const inp=q(".search");
+  if(inp){ inp.focus(); inp.setSelectionRange(inp.value.length,inp.value.length); }
+}
+
+/* ---------- vault ---------- */
+function vaultHTML(){
+  const st=S.status, cfg=st.config;
+  const utxos=S.utxos||[];
+  return `
+  <section class="panel">
+    <div class="head">Vault</div>
+    <div class="body">
+      <div class="kv">
+        <div class="k">Wallet</div><div class="v">${esc((selectedAccount()||{}).name||cfg.walletName||"—")}</div>
+        <div class="k">Address</div><div class="v mono copy-inline">${cfg.vaultAddress}
+          <button class="iconbtn" onclick="copy('${cfg.vaultAddress}','Address copied')">${icon("copy")}</button></div>
+        <div class="k">Balance</div><div class="v">${coin(st.balanceSats)}</div>
+        <div class="k">Unspent outputs</div><div class="v">${st.utxoCount}</div>
+        <div class="k">Chain</div><div class="v">${cfg.chainName}</div>
+        <div class="k">Threshold</div><div class="v">${cfg.requiredSignatures}-of-3 signatures</div>
+        <div class="k">Coinbase maturity</div><div class="v">${cfg.coinbaseMaturity} confirmations</div>
+        <div class="k">Max inputs / tx</div><div class="v">${cfg.maxTxInputs} (limit 600)</div>
+      </div>
+    </div>
+  </section>
+  <div class="section">
+    <div class="section-head"><h2>Unspent outputs</h2><span class="line"></span>
+      <button class="btn ghost sm" onclick="loadUTXOs().then(render)">Refresh</button></div>
+    ${utxos.length?`<section class="panel"><div class="body" style="padding:0">
+      <table><thead><tr><th>Txid</th><th>Vout</th><th>Value</th><th>Confirmations</th></tr></thead><tbody>
+      ${utxos.map(u=>`<tr><td class="mono">${short(u.txid,18)}</td><td>${u.vout}</td><td>${coin(u.value)}</td><td>${u.confirmations}</td></tr>`).join("")}
+      </tbody></table></div></section>`:`<div class="empty">No UTXOs loaded yet.</div>`}
+  </div>`;
+}
+
+/* ---------- node ---------- */
+function nodeHTML(){
+  const st=S.status, self=st.self, cfg=st.config;
+  return `
+  <section class="panel">
+    <div class="head">Signing identity</div>
+    <div class="body"><div class="kv">
+      <div class="k">Operator index</div><div class="v">#${self.selfIndex}</div>
+      <div class="k">Public key</div><div class="v mono copy-inline">${self.pubkey}
+        <button class="iconbtn" onclick="copy('${self.pubkey}','Pubkey copied')">${icon("copy")}</button></div>
+      <div class="k">Peer ID</div><div class="v mono">${self.peerId||"—"}</div>
+      <div class="k">Connected peers</div><div class="v">${(st.peers||[]).length}</div>
+      <div class="k">Signing policy</div><div class="v">${self.autoSign?"automatic":"manual approval"}</div>
+      <div class="k">Broadcast policy</div><div class="v">${self.autoBroadcast?"automatic":"manual broadcast"}</div>
+    </div></div>
+  </section>
+  <div class="section">
+    <div class="section-head"><h2>Runtime</h2><span class="line"></span></div>
+    <section class="panel"><div class="body"><div class="kv">
+      <div class="k">Chain</div><div class="v">${cfg.chainName}</div>
+      <div class="k">Backend</div><div class="v">${cfg.backend}</div>
+      <div class="k">Chain tip</div><div class="v">${st.tipHeight} <span class="mono faint">${short(st.tipHash,16)}</span></div>
+      <div class="k">Minimum transfer</div><div class="v">${sats(cfg.minTransferSats)}</div>
+      <div class="k">Max inputs</div><div class="v">${cfg.maxTxInputs} per transaction</div>
+      <div class="k">Maturity</div><div class="v">${cfg.coinbaseMaturity} confirmations</div>
+      <div class="k">Open rejects</div><div class="v">${self.rejectCount||0}</div>
+    </div></div></section>
+  </div>`;
+}
+
+
+/* ---------- wallet manager ---------- */
+async function loadWallets(force){ await load(false); }
+function wfield(k,v){ S.walletDraft[k]=v; }
+function wpub(i,v){ S.walletDraft.pubs[i]=v; }
+
+function renderWallets(){
+  const chain = (S.status && S.status.config && S.status.config.chainName) || "";
+  const d=S.walletDraft;
+  const keyFields = d.source==="keys" ? `
+    <div class="grid3" style="margin-bottom:12px">
+      ${[0,1,2].map(i=>`<div><label class="field">Public key ${i+1}</label><input class="mono" value="${esc(d.pubs[i])}" placeholder="03… (33-byte hex)" oninput="wpub(${i},this.value)"></div>`).join("")}
+    </div>
+    <div class="grid3" style="margin-bottom:14px">
+      <div><label class="field">Key order</label><input value="${esc(d.order)}" placeholder="0,1,2" oninput="wfield('order',this.value)"></div>
+      <div><label class="field">Required signatures</label>
+        <select onchange="wfield('required',this.value)">
+          ${[1,2,3].map(n=>`<option value="${n}" ${String(d.required)===String(n)?"selected":""}>${n}-of-3</option>`).join("")}
+        </select></div>
+      <div></div>
+    </div>` : `
+    <div style="margin-bottom:14px"><label class="field">Redeem script (hex)</label>
+      <textarea class="mono" placeholder="5221…53ae" oninput="wfield('redeem',this.value)">${esc(d.redeem)}</textarea></div>
+    <div style="margin-bottom:14px"><label class="field">Required signatures</label>
+      <select onchange="wfield('required',this.value)">
+        ${[1,2,3].map(n=>`<option value="${n}" ${String(d.required)===String(n)?"selected":""}>${n}-of-3</option>`).join("")}
+      </select></div>`;
+
+  const createForm = S.showCreateWallet ? `
+  <section class="panel walletform" style="margin-bottom:18px">
+    <div class="head">Create multisig wallet · ${esc(chain)}</div>
+    <div class="body">
+      <form onsubmit="createWallet(event)">
+        <div class="grid3" style="margin-bottom:14px">
+          <div><label class="field">Wallet name</label><input value="${esc(d.name)}" placeholder="Ops Vault" oninput="wfield('name',this.value)"></div>
+          <div><label class="field">Definition</label>
+            <select onchange="wfield('source',this.value)">
+              <option value="keys" ${d.source==="keys"?"selected":""}>From 3 public keys</option>
+              <option value="redeem" ${d.source==="redeem"?"selected":""}>From redeem script</option>
+            </select></div>
+          <div><label class="field">Private key (optional)</label><input name="wif" type="password" placeholder="WIF — signs this wallet" autocomplete="off"></div>
+        </div>
+        ${keyFields}
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <button class="btn primary" type="submit">Derive &amp; save wallet</button>
+          <button class="btn" type="button" onclick="S.showCreateWallet=false; render()">Cancel</button>
+        </div>
+        <div class="hint" style="margin-top:8px">This node is locked to <b>${esc(chain)}</b>. A private key is stored locally and can sign any wallet whose redeem script contains its public key.</div>
+      </form>
+    </div>
+  </section>` : "";
+
+  const walletRow = a => `<tr>
+      <td data-label="Name">${esc(a.name)} ${a.active?'<span class="badge-active">env vault</span>':''}</td>
+      <td data-label="Chain">${esc(a.chain)}</td>
+      <td data-label="Threshold">${a.required}-of-3</td>
+      <td data-label="Address" class="mono">${esc(a.address)}</td>
+      <td data-label="Key">${a.hasKey?'<span class="badge-active">signer</span>':'<span class="dim">watch-only</span>'}</td>
+      <td data-label="Actions" class="actions-cell"><div class="wallet-actions">
+        ${a.address===S.wallet?'':'<button class="btn ghost sm" onclick="switchWallet(\''+esc(a.address)+'\')">Use</button>'}
+        <button class="btn ghost sm" onclick="copyWalletConfig('${esc(a.id)}')">Copy config</button>
+        ${a.active?'':`<button class="btn reject sm" onclick="deleteWallet('${esc(a.id)}')">Remove</button>`}
+      </div></td>
+    </tr>`;
+
+  const keyRows = S.keys.map(k=>`<tr>
+      <td class="mono">${esc(k.pubkey)}</td>
+      <td>${k.env?'<span class="badge-active">env</span>':'imported'}</td>
+      <td class="dim small">${k.env?"KEEPER_WIF":ago(k.added)}</td>
+      <td>${k.env?'':`<button class="btn reject sm" onclick="removeSigningKey('${esc(k.pubkey)}')">Remove</button>`}</td>
+    </tr>`).join("");
+
+  el("view").innerHTML = `
+  <div class="hero" style="align-items:center">
+    <div>
+      <div style="font-size:26px;font-weight:650;letter-spacing:-.02em">Multisig wallets</div>
+      <div class="sub">One node, one chain (${esc(chain)}). Switch wallets freely; keys are shared across matching multisigs.</div>
+    </div>
+    <div class="actions"><button class="btn primary" onclick="S.showCreateWallet=!S.showCreateWallet; render()">+ Create wallet</button></div>
+  </div>
+  <div class="notice">This node is restricted to <span class="mono">${esc(chain)}</span>. A signing key belongs to the node, not to a single wallet: add a WIF once and it can sign every wallet whose redeem script contains that public key. Watch-only wallets can still be tracked, funded and verified.</div>
+  ${createForm}
+  <section class="panel">
+    <div class="head">Wallets (${S.accounts.length})</div>
+    <div class="body" style="padding:0">
+      <div class="table-scroll"><table class="wallet-table"><thead><tr><th>Name</th><th>Chain</th><th>Threshold</th><th>P2SH address</th><th>Key</th><th></th></tr></thead>
+      <tbody>${S.accounts.map(walletRow).join("") || `<tr><td colspan="6" class="empty">No wallets yet.</td></tr>`}</tbody></table></div>
+    </div>
+  </section>
+  <div class="section">
+    <div class="section-head"><h2>Signing keys</h2><span class="line"></span><span class="small dim">${S.keys.length} key${S.keys.length===1?'':'s'}</span></div>
+    <section class="panel">
+      <div class="body" style="padding:0">
+        <div class="table-scroll"><table><thead><tr><th>Public key</th><th>Source</th><th>Added</th><th></th></tr></thead>
+        <tbody>${keyRows || `<tr><td colspan="4" class="empty">No signing keys. Add one below.</td></tr>`}</tbody></table></div>
+      </div>
+      <div class="body" style="border-top:1px solid var(--line-soft)">
+        <form onsubmit="addSigningKey(event)" style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end">
+          <div style="flex:1;min-width:260px"><label class="field">Add private key (WIF)</label>
+            <input name="wif" type="password" placeholder="WIF for this chain" autocomplete="off"></div>
+          <button class="btn primary" type="submit">Add key</button>
+        </form>
+        <div class="hint">The key is stored on this node only (0600 file) and is never returned by the API.</div>
+      </div>
+    </section>
+  </div>`;
+}
+
+async function createWallet(ev){
+  ev.preventDefault();
+  const f=ev.target, d=S.walletDraft;
+  const chainName=S.status.config.chainName;
+  const chainParam=["wojakcoin","junkcoin"].includes(chainName)?chainName:"custom";
+  const payload={name:d.name.trim(), chain:chainParam, chainName, required:parseInt(d.required,10)};
+  if(d.source==="keys"){
+    payload.pubkeys=d.pubs.map(p=>p.trim());
+    payload.order=(d.order||"0,1,2").split(",").map(s=>parseInt(s.trim(),10)).filter(n=>!isNaN(n));
+  } else {
+    payload.redeemScript=d.redeem.trim();
+  }
+  const wif=f.wif?f.wif.value.trim():"";
+  if(wif) payload.wif=wif;
+  try{
+    const r=await api("/api/accounts",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)});
+    toast((r.existing?"Wallet already saved: ":"Wallet created: ")+r.account.address,"ok");
+    S.showCreateWallet=false;
+    S.walletDraft={name:"",wif:"",source:"keys",pubs:["","",""],order:"0,1,2",required:"2",redeem:""};
+    await load(false);
+  }catch(e){ toast("Create wallet failed: "+e.message,"err"); }
+}
+async function addSigningKey(ev){
+  ev.preventDefault();
+  const wif=ev.target.wif.value.trim();
+  if(!wif){ toast("Enter a WIF","err"); return; }
+  try{
+    const r=await api("/api/keys",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({wif})});
+    toast((r.existing?"Key already present: ":"Key added: ")+short(r.key.pubkey,10),"ok");
+    ev.target.reset();
+    await load(false);
+  }catch(e){ toast("Add key failed: "+e.message,"err"); }
+}
+async function removeSigningKey(pub){
+  if(!confirm("Remove signing key "+short(pub,12)+" from this node?")) return;
+  try{ await api("/api/keys/"+encodeURIComponent(pub),{method:"DELETE"}); toast("Key removed","ok"); await load(false); }
+  catch(e){ toast("Remove key failed: "+e.message,"err"); }
+}
+async function deleteWallet(id){
+  const a=S.accounts.find(x=>x.id===id); const name=a?a.name:"wallet";
+  if(!confirm("Remove saved wallet \""+name+"\"?\nThis only deletes local metadata; on-chain funds are not affected.")) return;
+  try{ await api("/api/accounts/"+encodeURIComponent(id),{method:"DELETE"}); toast("Wallet removed: "+name,"ok"); await load(false); }
+  catch(e){ toast("Remove failed: "+e.message,"err"); }
+}
+function copyWalletConfig(id){
+  const a=S.accounts.find(x=>x.id===id); if(!a) return;
+  const lines=[];
+  if(a.chainKey==="custom"){
+    lines.push(`CHAIN="custom"`, `CHAIN_NAME="${a.chain}"`, `ADDR_PUBKEY_VERSION="${a.addrPubkeyVersion}"`,
+      `ADDR_SCRIPT_VERSION="${a.addrScriptVersion}"`, `WIF_VERSION="${a.wifVersion}"`,
+      `COINBASE_MATURITY="${a.coinbaseMaturity}"`);
+    if(a.electrsUrl) lines.push(`ELECTRS_URL="${a.electrsUrl}"`);
+  } else {
+    lines.push(`CHAIN="${a.chainKey}"`);
+  }
+  lines.push(`VAULT_ADDRESS="${a.address}"`, `REQUIRED_SIGS="${a.required}"`, `REDEEM_SCRIPT_HEX="${a.redeemScript}"`);
+  if(a.order && a.order.length) lines.push(`KEY_ORDER="${a.order.join(",")}"`);
+  copy(lines.join("\n"), "Wallet config copied");
+}
+
+/* ---------- render ---------- */
+function render(){
+  if(!S.status){
+    renderSidebar();
+    el("view").innerHTML=`<div class="empty">${S.error?("Cannot load keeper status: "+S.error):"Loading keeper status…"}</div>`;
+    return;
+  }
+  const view=S.view;
+  el("pageTitle").textContent=VIEW_META[view][0];
+  el("pageSub").textContent=VIEW_META[view][1];
+  renderSidebar();
+  if(view==="overview") el("view").innerHTML=overviewHTML();
+  else if(view==="transfer") { el("view").innerHTML=transferHTML(); bindAmountHint(); }
+  else if(view==="approvals") el("view").innerHTML=approvalsHTML();
+  else if(view==="wallets") renderWallets();
+  else if(view==="history") el("view").innerHTML=historyHTML();
+  else if(view==="vault") el("view").innerHTML=vaultHTML();
+  else if(view==="node") el("view").innerHTML=nodeHTML();
+}
+function bindAmountHint(){
+  const input=q('#tform [name="sats"]');
+  const hint=el("amountHint");
+  if(!input||!hint) return;
+  const update=()=>{ const v=parseInt(input.value||"0",10); hint.textContent=v>0?("= "+coin(v)):" "; };
+  input.addEventListener("input",update); update();
+}
+
+/* ---------- actions ---------- */
+async function refresh(manual){ await load(manual); }
+
+async function act(id, kind){
+  if(kind==="approve"){
+    if(!confirm("Sign transaction "+id+"?\nOnce the required signatures are collected it becomes ready to broadcast.")) return;
+    try{ await api("/api/proposal/"+id+"/approve",{method:"POST"}); toast("Approved and signed: "+id,"ok"); }
+    catch(e){ toast(e.message,"err"); }
+  } else if(kind==="reject"){
+    const reason=prompt("Reason for rejecting "+id+":","I do not approve");
+    if(reason===null) return;
+    try{ await api("/api/proposal/"+id+"/reject",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({reason})}); toast("Rejection sent: "+id,"ok"); }
+    catch(e){ toast(e.message,"err"); }
+  } else if(kind==="broadcast"){
+    if(!confirm("Broadcast transaction "+id+" to the network?")) return;
+    try{ const r=await api("/api/proposal/"+id+"/broadcast",{method:"POST"}); toast("Broadcast: "+(r.txid||id),"ok"); }
+    catch(e){ toast("Broadcast failed: "+e.message,"err"); }
+  }
+  await load(false);
+}
+
+async function submitTransfer(ev){
+  ev.preventDefault();
+  const f=ev.target;
+  const to=f.to.value.trim(), amount=parseInt(f.sats.value,10), memo=f.memo.value.trim();
+  if(!to||!amount||amount<=0){ toast("Enter a destination and amount","err"); return; }
+  try{
+    const r=await api("/api/transfer",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({wallet:S.wallet,to,amountSats:amount,memo})});
+    toast("Proposal created: "+r.proposalId,"ok");
+    S.draft={to:"",amount:"",memo:""};
+    await load(false);
+    navigate("approvals");
+    S.approvalsTab="others"; render();
+  }catch(e){ toast("Proposal failed: "+e.message,"err"); }
+}
+
+function consolidate(){
+  const a=selectedAccount();
+  if(!a){ toast("Select a wallet first","err"); return; }
+  S.draft.to=a.address;
+  S.draft.amount=String(S.status.balanceSats);
+  navigate("transfer");
+  toast("Consolidation draft for "+a.name+": destination is the wallet, amount is its full balance. Submit to propose.","ok");
+}
+
+/* ---------- boot ---------- */
+S.view=currentView();
+refresh(false);
+setInterval(()=>{ if(el("auto") && el("auto").checked) refresh(false); }, 5000);
+</script>
+</body>
+</html>

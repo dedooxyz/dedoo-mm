@@ -1,0 +1,36 @@
+# --- secrets and runtime state ---------------------------------------------
+.env
+/keeper.env
+*/keeper.env
+keeper-state.json
+keeper-accounts.json
+keeper-keys.json
+keeper-*.json
+**/keeper-state.json
+**/keeper-accounts.json
+**/keeper-keys.json
+keeper-identity.bin
+**/keeper-identity.bin
+
+# --- build output ------------------------------------------------------------
+/dist/
+/bin/
+/wojak-keeper
+*.test
+*.out
+
+# --- internal design / generated docs (may contain live operational data) ---
+/DESIGN.md
+/docs/documentation.aux
+/docs/documentation.log
+/docs/documentation.out
+/docs/documentation.pdf
+/docs/documentation.tex
+/docs/documentation.toc
+
+# --- editor / OS -------------------------------------------------------------
+.DS_Store
+*.swp
+*.swo
+.idea/
+.vscode/
