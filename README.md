@@ -18,12 +18,15 @@ all keys.
 - **Watch-only wallets** for tracking and verifying without a private key.
 - **Human-in-the-loop by default**: proposals wait for manual approval, and a
   completed transaction waits for an explicit broadcast.
+- **Consolidation with UTXO selection**: choose how many mature UTXOs to merge;
+  the output amount is derived from those UTXOs minus the network fee.
 - **P2P coordination** over libp2p with DHT rendezvous, a private relay, and
   optional static peers. No central coordinator.
 - **Independent verification** of every proposal before this node signs.
-- **Limits and safety rails**: per-transaction input cap (hard maximum 600),
-  1 MB transaction size check, coinbase maturity enforcement, proposal ID
-  collision protection, and canonical destination checks.
+- **Limits and safety rails**: per-transaction input cap enforced against the
+  chain's 100 KB standard transaction size (about 333 P2SH 2-of-3 inputs),
+  coinbase maturity enforcement, proposal ID collision protection, and
+  canonical destination checks.
 - **Single static binary** with an embedded web UI and Basic Auth.
 
 ## Security model
@@ -77,7 +80,7 @@ CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
 ## Install (one keeper node)
 
 ```bash
-VERSION=v0.1.0
+VERSION=v0.1.1
 tar xzf "dedoo-multisig-manager-${VERSION}-linux-amd64.tar.gz"
 cd "dedoo-multisig-manager-${VERSION}-linux-amd64"
 ./install.sh ./dedoo-mm .

@@ -343,7 +343,7 @@ func BuildAndSignMultisigTx(
 		return "", fmt.Errorf("failed to serialize tx: %w", err)
 	}
 	if buf.Len() > MaxTxBytes {
-		return "", fmt.Errorf("transaction is %d bytes; network maximum is %d (reduce MAX_TX_INPUTS)", buf.Len(), MaxTxBytes)
+		return "", fmt.Errorf("transaction is %d bytes; chain standard limit is %d (reduce MAX_TX_INPUTS)", buf.Len(), MaxTxBytes)
 	}
 	return hex.EncodeToString(buf.Bytes()), nil
 }
@@ -497,6 +497,9 @@ func CosignMultisigTx(
 	var buf bytes.Buffer
 	if err := msgTx.Serialize(&buf); err != nil {
 		return "", false, fmt.Errorf("failed to serialize tx: %w", err)
+	}
+	if buf.Len() > MaxTxBytes {
+		return "", false, fmt.Errorf("transaction is %d bytes; chain standard limit is %d (reduce MAX_TX_INPUTS)", buf.Len(), MaxTxBytes)
 	}
 
 	return hex.EncodeToString(buf.Bytes()), anyComplete && allInputsComplete, nil

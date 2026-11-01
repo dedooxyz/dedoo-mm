@@ -339,13 +339,9 @@ func (c *ElectrsClient) getAddressTxs(address string, afterTxid string) ([]map[s
 
 // maxUTXOEntries bounds how many UTXOs getUTXOs will page through for one
 // address. Daemon vaults can hold tens of thousands of coinbase outputs;
-// proposals only ever need MAX_TX_INPUTS (~100) and the UI table is capped,
-// so there is no reason to download the entire history.
-const maxUTXOEntries = 500
-
-// MaxTxBytes is the network's maximum transaction size. Consolidations must
-// stay below this; the processor caps inputs at MaxConsolidationInputs.
-const MaxTxBytes = 1_000_000
+// proposals only ever need MaxTxInputs (600) and the UI table is capped, so
+// there is no reason to download the entire history.
+const maxUTXOEntries = MaxTxInputs
 
 func (c *ElectrsClient) getUTXOs(address string, minConfirmations int64) ([]UTXO, error) {
 	tip, err := c.getTipHeight()

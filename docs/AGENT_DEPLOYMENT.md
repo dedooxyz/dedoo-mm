@@ -95,7 +95,7 @@ Do not proceed if the electrs endpoint or relay port is unreachable.
 1. Upload the package and install:
 
 ```bash
-VERSION=v0.1.0
+VERSION=v0.1.1
 scp "dedoo-multisig-manager-${VERSION}-linux-amd64.tar.gz" root@HOST:/root/
 ssh root@HOST
 cd /root
@@ -124,6 +124,8 @@ BACKEND="electrs"
 ELECTRS_URL="https://wojak-api.s3na.xyz"
 COINBASE_MATURITY="20"
 MIN_TRANSFER_SATS="10000"
+# Operator cap. The chain's 100 KB standard transaction limit allows about
+# 333 P2SH 2-of-3 inputs; raise this if you consolidate more per transaction.
 MAX_TX_INPUTS="100"
 AUTO_SIGN="false"
 AUTO_BROADCAST="false"

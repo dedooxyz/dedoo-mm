@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"log"
+	"sort"
 	"time"
 
 	"github.com/dedooxyz/dedoo-mm/internal/chain"
@@ -17,19 +18,57 @@ import (
 // DustLimit is the minimum change output size we emit.
 const DustLimit = 15000
 
-// MaxConsolidationInputs is the hard cap for one transaction. ~600 P2SH
-// 2-of-3 inputs is the practical ceiling for the 1 MB network tx limit.
-const MaxConsolidationInputs = 600
+// ConsolidationPlan is a read-only preview of a consolidation transaction.
+// The output amount is always derived from the selected UTXOs minus the
+// network fee, never supplied by the caller.
+type ConsolidationPlan struct {
+	Wallet     string       `json:"wallet"`
+	Available  int          `json:"availableUtxos"`
+	Requested  int          `json:"requestedUtxos"`
+	Selected   int          `json:"selectedUtxos"`
+	MaxInputs  int          `json:"maxInputs"`  // effective cap: min(MAX_TX_INPUTS, chain)
+	ChainLimit int          `json:"chainLimit"` // hard cap from the chain's 100 KB standard tx size
+	GrossSats  int64        `json:"grossSats"`  // sum of selected UTXOs
+	FeeSats    int64        `json:"feeSats"`    // estimated network fee
+	NetSats    int64        `json:"netSats"`    // consolidated output value
+	UTXOs      []chain.UTXO `json:"utxos"`      // exactly the inputs that will be spent
+}
 
-func (k *Keeper) maxInputs() int {
+type inputSelection struct {
+	utxos     []chain.UTXO
+	available int
+	gross     int64
+	fee       int64
+	net       int64
+	maxInputs int
+	chainMax  int
+}
+
+// chainInputLimit returns the hard number of inputs the chain allows for this
+// wallet's redeem script.
+func chainInputLimit(redeem string, required int) int {
+	return chain.MaxInputsForRedeem(redeem, required)
+}
+
+// maxInputsFor is the effective per-transaction cap: the operator's
+// MAX_TX_INPUTS, never above the chain's standard transaction size limit.
+func (k *Keeper) maxInputsFor(redeem string, required int) int {
+	chainMax := chainInputLimit(redeem, required)
 	n := k.cfg.MaxTxInputs
-	if n <= 0 {
-		n = 100
-	}
-	if n > MaxConsolidationInputs {
-		n = MaxConsolidationInputs
+	if n <= 0 || n > chainMax {
+		n = chainMax
 	}
 	return n
+}
+
+// minConsolidationOutput is the smallest acceptable consolidated output: the
+// operator's transfer floor, but never below the chain's dust threshold.
+func (k *Keeper) minConsolidationOutput() int64 {
+	min := k.cfg.MinTransferSats
+	if min < DustLimit {
+		min = DustLimit
+	}
+	return min
 }
 
 // ErrInvalidRequest describes a rejected manual transfer request.
@@ -37,9 +76,51 @@ type ErrInvalidRequest struct{ msg string }
 
 func (e ErrInvalidRequest) Error() string { return e.msg }
 
-// ProposeTransfer builds a manual wallet transfer/consolidation, signs it with
-// the node key that matches the wallet, and broadcasts the proposal.
+// ProposeTransfer builds a manual wallet transfer, signs it with the node key
+// that matches the wallet, and broadcasts the proposal. A transfer to the
+// wallet itself is treated as a consolidation of all mature UTXOs (capped by
+// the transaction limit); use ProposeConsolidation to choose a specific count.
 func (k *Keeper) ProposeTransfer(walletAddr, to string, amountSats int64, memo string) (string, error) {
+	return k.proposeTransfer(walletAddr, to, amountSats, memo, false, 0)
+}
+
+// ProposeConsolidation merges utxoCount mature UTXOs into one output back to
+// the wallet. utxoCount == 0 means "all mature, capped by the transaction
+// limit". The coin amount is derived from the selected UTXOs minus the fee.
+func (k *Keeper) ProposeConsolidation(walletAddr string, utxoCount int, memo string) (string, error) {
+	if utxoCount < 0 {
+		return "", ErrInvalidRequest{msg: "utxo count must be >= 0 (0 = all mature)"}
+	}
+	return k.proposeTransfer(walletAddr, "", 0, memo, true, utxoCount)
+}
+
+// PlanConsolidation previews a consolidation without creating a proposal.
+func (k *Keeper) PlanConsolidation(walletAddr string, utxoCount int) (ConsolidationPlan, error) {
+	if walletAddr == "" {
+		walletAddr = k.cfg.VaultAddress
+	}
+	if utxoCount < 0 {
+		return ConsolidationPlan{}, ErrInvalidRequest{msg: "utxo count must be >= 0 (0 = all mature)"}
+	}
+	sel, err := k.selectConsolidation(walletAddr, utxoCount)
+	if err != nil {
+		return ConsolidationPlan{}, err
+	}
+	return ConsolidationPlan{
+		Wallet:     walletAddr,
+		Available:  sel.available,
+		Requested:  utxoCount,
+		Selected:   len(sel.utxos),
+		MaxInputs:  sel.maxInputs,
+		ChainLimit: sel.chainMax,
+		GrossSats:  sel.gross,
+		FeeSats:    sel.fee,
+		NetSats:    sel.net,
+		UTXOs:      sel.utxos,
+	}, nil
+}
+
+func (k *Keeper) proposeTransfer(walletAddr, to string, amountSats int64, memo string, consolidate bool, utxoCount int) (string, error) {
 	if walletAddr == "" {
 		walletAddr = k.cfg.VaultAddress
 	}
@@ -47,9 +128,11 @@ func (k *Keeper) ProposeTransfer(walletAddr, to string, amountSats int64, memo s
 	w := k.accountByAddressLocked(walletAddr)
 	var key *signingKey
 	var redeem string
+	var required int
 	if w != nil {
 		key, _ = k.walletKeyLocked(w)
 		redeem = w.view.RedeemScript
+		required = w.view.Required
 	}
 	k.mu.Unlock()
 	if w == nil {
@@ -59,6 +142,9 @@ func (k *Keeper) ProposeTransfer(walletAddr, to string, amountSats int64, memo s
 		return "", ErrInvalidRequest{msg: fmt.Sprintf("wallet %q has no signing key on this node; add a private key in the UI", w.view.Name)}
 	}
 
+	if consolidate {
+		to = walletAddr
+	}
 	verTo, _, err := chain.DecodeAddress(to)
 	if err != nil {
 		return "", ErrInvalidRequest{msg: fmt.Sprintf("bad destination: %v", err)}
@@ -66,12 +152,14 @@ func (k *Keeper) ProposeTransfer(walletAddr, to string, amountSats int64, memo s
 	if verTo != chain.AddrPubkeyVersion && verTo != chain.AddrScriptVersion {
 		return "", ErrInvalidRequest{msg: fmt.Sprintf("destination version %d is not canonical for this chain (want %d or %d)", verTo, chain.AddrPubkeyVersion, chain.AddrScriptVersion)}
 	}
-	if amountSats < k.cfg.MinTransferSats {
+	if !consolidate && (amountSats <= 0 || amountSats < k.cfg.MinTransferSats) {
 		return "", ErrInvalidRequest{msg: fmt.Sprintf("amount %d below min %d", amountSats, k.cfg.MinTransferSats)}
 	}
 
 	// Deterministic id (per wallet) = idempotency window for identical submits.
-	propID := newTransferID(walletAddr, to, amountSats, memo, "")
+	// The UTXO count is part of the id so different consolidation selections
+	// never collide.
+	propID := newTransferID(walletAddr, to, amountSats, memo, "", utxoCount)
 	k.mu.Lock()
 	if st := k.props[propID]; st != nil {
 		if !st.terminal() {
@@ -79,7 +167,7 @@ func (k *Keeper) ProposeTransfer(walletAddr, to string, amountSats int64, memo s
 			return propID, nil
 		}
 		for i := 0; i < 8; i++ {
-			candidate := newTransferID(walletAddr, to, amountSats, memo, randomNonce())
+			candidate := newTransferID(walletAddr, to, amountSats, memo, randomNonce(), utxoCount)
 			if k.props[candidate] == nil {
 				propID = candidate
 				break
@@ -88,52 +176,19 @@ func (k *Keeper) ProposeTransfer(walletAddr, to string, amountSats int64, memo s
 	}
 	k.mu.Unlock()
 
-	vaultAddr := walletAddr
-	selfTarget := to == vaultAddr
+	selfTarget := consolidate || to == walletAddr
 
-	minConf := k.cfg.CoinbaseMaturity
-	utxos, err := k.chain.GetUTXOs(vaultAddr, minConf)
-	if err != nil {
-		return "", fmt.Errorf("wallet utxos: %w", err)
-	}
-	var mature []chain.UTXO
-	for _, u := range utxos {
-		if u.Confirmations >= minConf {
-			mature = append(mature, u)
-		}
-	}
-	if len(mature) == 0 {
-		return "", ErrInvalidRequest{msg: fmt.Sprintf("wallet has no mature utxos (requires >= %d confs)", minConf)}
-	}
-	totalMature := len(mature)
-	maxInputs := k.maxInputs()
-
-	var selected []chain.UTXO
-	var gross int64
+	var sel *inputSelection
 	if selfTarget {
-		if len(mature) > maxInputs {
-			mature = mature[:maxInputs]
-		}
-		selected = mature
-		for _, u := range selected {
-			gross += u.Value
-		}
+		sel, err = k.selectConsolidation(walletAddr, utxoCount)
 	} else {
-		fee := k.chain.EstimateFeeSatsWithMin(1, 2, 6, 10)
-		for _, u := range mature {
-			selected = append(selected, u)
-			gross += u.Value
-			fee = k.chain.EstimateFeeSatsWithMin(len(selected), 2, 6, 10)
-			if gross >= amountSats+fee || len(selected) >= maxInputs {
-				break
-			}
-		}
-		if gross < amountSats+fee {
-			return "", ErrInvalidRequest{msg: fmt.Sprintf(
-				"insufficient mature funds within %d inputs: have %d sats, need %d + fee %d; raise MAX_TX_INPUTS (max %d) or consolidate in batches",
-				len(selected), gross, amountSats, fee, maxInputs)}
-		}
+		sel, err = k.selectTransfer(walletAddr, amountSats, redeem, required)
 	}
+	if err != nil {
+		return "", err
+	}
+	selected := sel.utxos
+	gross := sel.gross
 
 	nOutputs := 2
 	if selfTarget {
@@ -144,17 +199,23 @@ func (k *Keeper) ProposeTransfer(walletAddr, to string, amountSats int64, memo s
 	outputs := []chain.Output{{Address: to, ValueSats: amountSats}}
 	switch {
 	case selfTarget:
-		if gross < fee+DustLimit {
+		net := gross - fee
+		if net <= 0 {
 			return "", ErrInvalidRequest{msg: fmt.Sprintf("consolidation aborted: gross %d <= fee %d", gross, fee)}
 		}
-		outputs = []chain.Output{{Address: vaultAddr, ValueSats: gross - fee}}
-		amountSats = gross - fee
-		fee = 0
+		if net < k.minConsolidationOutput() {
+			return "", ErrInvalidRequest{msg: fmt.Sprintf("consolidation aborted: output %d below minimum %d", net, k.minConsolidationOutput())}
+		}
+		outputs = []chain.Output{{Address: walletAddr, ValueSats: net}}
+		amountSats = net
 		if memo == "" {
 			memo = fmt.Sprintf("consolidate %d utxos", len(selected))
-		}
-		if len(selected) < totalMature {
-			memo = fmt.Sprintf("consolidate %d of %d utxos (max %d per tx)", len(selected), totalMature, maxInputs)
+			if len(selected) < sel.available {
+				memo = fmt.Sprintf("consolidate %d of %d utxos", len(selected), sel.available)
+				if utxoCount == 0 {
+					memo += fmt.Sprintf(" (max %d per tx)", sel.maxInputs)
+				}
+			}
 		}
 	case gross < amountSats+fee:
 		return "", ErrInvalidRequest{msg: fmt.Sprintf("insufficient mature funds: gross %d < requested %d + fee %d", gross, amountSats, fee)}
@@ -164,7 +225,7 @@ func (k *Keeper) ProposeTransfer(walletAddr, to string, amountSats int64, memo s
 			return "", ErrInvalidRequest{msg: fmt.Sprintf("amount leaves unreadable dust change (%d sats); adjust the amount so change >= %d", change, DustLimit)}
 		}
 		if change > 0 {
-			outputs = append(outputs, chain.Output{Address: vaultAddr, ValueSats: change})
+			outputs = append(outputs, chain.Output{Address: walletAddr, ValueSats: change})
 		}
 	}
 
@@ -198,8 +259,183 @@ func (k *Keeper) ProposeTransfer(walletAddr, to string, amountSats int64, memo s
 	if k.node != nil {
 		k.node.Broadcast(p2p.TypeProposeTransfer, prop)
 	}
-	log.Printf("[transfer] proposed %s (%s): %d sats -> %s", propID, w.view.Name, amountSats, to)
+	if selfTarget {
+		log.Printf("[transfer] proposed consolidation %s (%s): %d utxos, %d sats -> %s", propID, w.view.Name, len(selected), amountSats, walletAddr)
+	} else {
+		log.Printf("[transfer] proposed %s (%s): %d sats -> %s", propID, w.view.Name, amountSats, to)
+	}
 	return propID, nil
+}
+
+// matureUTXOs returns the wallet's spendable outputs after applying the
+// chain's coinbase maturity window.
+func (k *Keeper) matureUTXOs(walletAddr string) ([]chain.UTXO, error) {
+	minConf := k.cfg.CoinbaseMaturity
+	utxos, err := k.chain.GetUTXOs(walletAddr, minConf)
+	if err != nil {
+		return nil, fmt.Errorf("wallet utxos: %w", err)
+	}
+	mature := make([]chain.UTXO, 0, len(utxos))
+	for _, u := range utxos {
+		if u.Confirmations >= minConf {
+			mature = append(mature, u)
+		}
+	}
+	return mature, nil
+}
+
+// sortForSpend puts larger outputs first so a transfer needs as few inputs as
+// possible, which keeps it under the chain limit.
+func sortForSpend(utxos []chain.UTXO) {
+	sort.Slice(utxos, func(i, j int) bool {
+		if utxos[i].Value != utxos[j].Value {
+			return utxos[i].Value > utxos[j].Value
+		}
+		if utxos[i].Confirmations != utxos[j].Confirmations {
+			return utxos[i].Confirmations > utxos[j].Confirmations
+		}
+		if utxos[i].Txid != utxos[j].Txid {
+			return utxos[i].Txid < utxos[j].Txid
+		}
+		return utxos[i].Vout < utxos[j].Vout
+	})
+}
+
+// sortForConsolidation puts smaller outputs first so dust and low-value coins
+// are cleared first. The order is deterministic so the preview and the
+// proposal select the same UTXOs.
+func sortForConsolidation(utxos []chain.UTXO) {
+	sort.Slice(utxos, func(i, j int) bool {
+		if utxos[i].Value != utxos[j].Value {
+			return utxos[i].Value < utxos[j].Value
+		}
+		if utxos[i].Confirmations != utxos[j].Confirmations {
+			return utxos[i].Confirmations > utxos[j].Confirmations
+		}
+		if utxos[i].Txid != utxos[j].Txid {
+			return utxos[i].Txid < utxos[j].Txid
+		}
+		return utxos[i].Vout < utxos[j].Vout
+	})
+}
+
+func (k *Keeper) selectConsolidation(walletAddr string, utxoCount int) (*inputSelection, error) {
+	k.mu.Lock()
+	w := k.accountByAddressLocked(walletAddr)
+	var redeem string
+	var required int
+	if w != nil {
+		redeem = w.view.RedeemScript
+		required = w.view.Required
+	}
+	k.mu.Unlock()
+	if w == nil {
+		return nil, ErrInvalidRequest{msg: fmt.Sprintf("unknown wallet %s", walletAddr)}
+	}
+
+	mature, err := k.matureUTXOs(walletAddr)
+	if err != nil {
+		return nil, err
+	}
+	if len(mature) == 0 {
+		return nil, ErrInvalidRequest{msg: fmt.Sprintf("wallet has no mature utxos (requires >= %d confs)", k.cfg.CoinbaseMaturity)}
+	}
+	sortForConsolidation(mature)
+
+	chainMax := chainInputLimit(redeem, required)
+	maxInputs := k.maxInputsFor(redeem, required)
+	available := len(mature)
+
+	switch {
+	case utxoCount == 0:
+		utxoCount = available
+		if utxoCount > maxInputs {
+			utxoCount = maxInputs
+		}
+	case utxoCount > maxInputs:
+		return nil, ErrInvalidRequest{msg: fmt.Sprintf(
+			"requested %d utxos exceeds this node's per-transaction limit of %d (chain limit %d); raise MAX_TX_INPUTS or consolidate in batches",
+			utxoCount, maxInputs, chainMax)}
+	case utxoCount > available:
+		return nil, ErrInvalidRequest{msg: fmt.Sprintf("requested %d utxos but only %d are mature", utxoCount, available)}
+	}
+
+	selected := mature[:utxoCount]
+	var gross int64
+	for _, u := range selected {
+		gross += u.Value
+	}
+	fee := k.chain.EstimateFeeSatsWithMin(len(selected), 1, 6, 10)
+	net := gross - fee
+	if net <= 0 {
+		return nil, ErrInvalidRequest{msg: fmt.Sprintf("consolidation aborted: gross %d <= fee %d", gross, fee)}
+	}
+	if net < k.minConsolidationOutput() {
+		return nil, ErrInvalidRequest{msg: fmt.Sprintf("consolidation aborted: output %d below minimum %d", net, k.minConsolidationOutput())}
+	}
+
+	return &inputSelection{
+		utxos:     selected,
+		available: available,
+		gross:     gross,
+		fee:       fee,
+		net:       net,
+		maxInputs: maxInputs,
+		chainMax:  chainMax,
+	}, nil
+}
+
+func (k *Keeper) selectTransfer(walletAddr string, amountSats int64, redeem string, required int) (*inputSelection, error) {
+	mature, err := k.matureUTXOs(walletAddr)
+	if err != nil {
+		return nil, err
+	}
+	if len(mature) == 0 {
+		return nil, ErrInvalidRequest{msg: fmt.Sprintf("wallet has no mature utxos (requires >= %d confs)", k.cfg.CoinbaseMaturity)}
+	}
+	sortForSpend(mature)
+
+	chainMax := chainInputLimit(redeem, required)
+	maxInputs := k.maxInputsFor(redeem, required)
+	available := len(mature)
+
+	var selected []chain.UTXO
+	var gross int64
+	var total int64
+	for _, u := range mature {
+		total += u.Value
+	}
+
+	fee := k.chain.EstimateFeeSatsWithMin(1, 2, 6, 10)
+	for _, u := range mature {
+		selected = append(selected, u)
+		gross += u.Value
+		fee = k.chain.EstimateFeeSatsWithMin(len(selected), 2, 6, 10)
+		if gross >= amountSats+fee || len(selected) >= maxInputs {
+			break
+		}
+	}
+
+	if gross < amountSats+fee {
+		if len(selected) >= maxInputs {
+			return nil, ErrInvalidRequest{msg: fmt.Sprintf(
+				"amount %d sats needs more than %d inputs (this node's limit; chain limit %d) with %d mature utxos worth %d sats: consolidate first or raise MAX_TX_INPUTS",
+				amountSats, maxInputs, chainMax, available, total)}
+		}
+		return nil, ErrInvalidRequest{msg: fmt.Sprintf(
+			"insufficient mature funds: have %d sats across %d utxos, need %d + fee %d",
+			total, available, amountSats, fee)}
+	}
+
+	return &inputSelection{
+		utxos:     selected,
+		available: available,
+		gross:     gross,
+		fee:       fee,
+		net:       gross - amountSats - fee,
+		maxInputs: maxInputs,
+		chainMax:  chainMax,
+	}, nil
 }
 
 // verifyTransfer re-derives a peer's transfer against the wallet named in the
@@ -218,7 +454,25 @@ func (k *Keeper) verifyTransfer(prop p2p.TransferProposal) error {
 	if w == nil {
 		return fmt.Errorf("unknown wallet %s", prop.Vault)
 	}
-	_ = required
+
+	// Reject transactions the chain will not relay. This is checked here as
+	// well as in the builder because a peer may have produced the raw tx with
+	// a different (or compromised) implementation.
+	if len(prop.RawTxHex)/2 > chain.MaxTxBytes {
+		return fmt.Errorf("transaction is %d bytes; chain standard limit is %d", len(prop.RawTxHex)/2, chain.MaxTxBytes)
+	}
+	inputs, err := chain.ParseInputsFromRawHex(prop.RawTxHex)
+	if err != nil {
+		return fmt.Errorf("invalid tx inputs: %w", err)
+	}
+	chainMax := chainInputLimit(redeem, required)
+	if len(inputs) > chainMax {
+		return fmt.Errorf("transaction has %d inputs; chain limit for this wallet is %d", len(inputs), chainMax)
+	}
+	if localMax := k.maxInputsFor(redeem, required); len(inputs) > localMax {
+		log.Printf("[transfer] warning: proposal %s has %d inputs, above this node's MAX_TX_INPUTS=%d (chain limit %d)",
+			prop.ProposalId, len(inputs), localMax, chainMax)
+	}
 
 	verTo, _, err := chain.DecodeAddress(prop.To)
 	if err != nil {
@@ -321,9 +575,9 @@ func (k *Keeper) onProposeTransfer(prop p2p.TransferProposal) error {
 	return nil
 }
 
-func newTransferID(vault, to string, amount int64, memo, nonce string) string {
+func newTransferID(vault, to string, amount int64, memo, nonce string, utxoCount int) string {
 	h := sha256.New()
-	fmt.Fprintf(h, "%s|%s|%d|%s|%d|%s", vault, to, amount, memo, time.Now().Unix()/300, nonce)
+	fmt.Fprintf(h, "%s|%s|%d|%s|%d|%s|%d", vault, to, amount, memo, time.Now().Unix()/300, nonce, utxoCount)
 	return idPrefixTransfer + hex.EncodeToString(h.Sum(nil))[:16]
 }
 

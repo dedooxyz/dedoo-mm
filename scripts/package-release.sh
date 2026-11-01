@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Build the multi-platform release archives from prebuilt binaries.
 #
-#   ./scripts/package-release.sh v0.1.0 ./bin
+#   ./scripts/package-release.sh v0.1.1 ./bin
 #
 # BIN_DIR must contain:
 #   dedoo-mm-linux-amd64

@@ -13,6 +13,7 @@ import (
 	"io/fs"
 	"log"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -32,6 +33,8 @@ type Backend interface {
 	ListProposals() []processor.ProposalView
 	GetProposal(id string) (processor.ProposalView, error)
 	ProposeTransfer(wallet, to string, amountSats int64, memo string) (string, error)
+	ProposeConsolidation(wallet string, utxoCount int, memo string) (string, error)
+	PlanConsolidation(wallet string, utxoCount int) (processor.ConsolidationPlan, error)
 	ApproveProposal(id string) (string, error)
 	RejectProposal(id, reason string) error
 	BroadcastProposal(id string) (string, error)
@@ -96,6 +99,8 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("GET /api/proposal/{id}", s.handleProposal)
 	s.mux.HandleFunc("GET /api/proposal/{id}/raw", s.handleProposalRaw)
 	s.mux.HandleFunc("POST /api/transfer", s.handleTransfer)
+	s.mux.HandleFunc("POST /api/consolidate", s.handleConsolidate)
+	s.mux.HandleFunc("GET /api/consolidation/plan", s.handleConsolidationPlan)
 	s.mux.HandleFunc("POST /api/proposal/{id}/approve", s.handleApprove)
 	s.mux.HandleFunc("POST /api/proposal/{id}/reject", s.handleReject)
 	s.mux.HandleFunc("POST /api/proposal/{id}/broadcast", s.handleBroadcast)
@@ -160,6 +165,8 @@ func (s *Server) handleStatus(w http.ResponseWriter, r *http.Request) {
 	required := 0
 	var balance int64
 	utxoCount := 0
+	effectiveMaxInputs := 0
+	chainInputLimit := 0
 	if wallet != "" {
 		acct, err := s.backend.GetAccount(wallet)
 		if err != nil {
@@ -169,6 +176,8 @@ func (s *Server) handleStatus(w http.ResponseWriter, r *http.Request) {
 		address, name, hasKey, required = acct.Address, acct.Name, acct.HasKey, acct.Required
 		balance = s.backend.Balance(acct.Address)
 		utxoCount = s.backend.UTXOCount(acct.Address)
+		effectiveMaxInputs = acct.MaxInputs
+		chainInputLimit = acct.ChainInputLimit
 	}
 	s.writeJSON(w, http.StatusOK, map[string]interface{}{
 		"self": self,
@@ -180,6 +189,8 @@ func (s *Server) handleStatus(w http.ResponseWriter, r *http.Request) {
 			"walletHasKey":       hasKey,
 			"requiredSignatures": required,
 			"maxTxInputs":        cfg.MaxTxInputs,
+			"maxInputs":          effectiveMaxInputs,
+			"chainInputLimit":    chainInputLimit,
 			"minTransferSats":    cfg.MinTransferSats,
 			"coinbaseMaturity":   cfg.CoinbaseMaturity,
 		},
@@ -244,6 +255,55 @@ func (s *Server) handleTransfer(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.writeJSON(w, http.StatusOK, map[string]string{"proposalId": id})
+}
+
+type consolidateReq struct {
+	Wallet    string `json:"wallet"`
+	UtxoCount int    `json:"utxoCount"`
+	Memo      string `json:"memo"`
+}
+
+// handleConsolidate builds a self-transfer that merges the requested number of
+// mature UTXOs. The amount is derived from those UTXOs, not from the client.
+func (s *Server) handleConsolidate(w http.ResponseWriter, r *http.Request) {
+	var req consolidateReq
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		s.fail(w, http.StatusBadRequest, fmt.Errorf("bad json"))
+		return
+	}
+	if req.Wallet == "" {
+		req.Wallet = s.backend.PublicConfig().VaultAddress
+	}
+	id, err := s.backend.ProposeConsolidation(req.Wallet, req.UtxoCount, req.Memo)
+	if err != nil {
+		s.fail(w, http.StatusUnprocessableEntity, err)
+		return
+	}
+	s.writeJSON(w, http.StatusOK, map[string]string{"proposalId": id})
+}
+
+// handleConsolidationPlan previews which UTXOs would be selected and the
+// resulting output amount. utxos=0 means all mature (capped by the limit).
+func (s *Server) handleConsolidationPlan(w http.ResponseWriter, r *http.Request) {
+	wallet := r.URL.Query().Get("wallet")
+	if wallet == "" {
+		wallet = s.backend.PublicConfig().VaultAddress
+	}
+	utxoCount := 0
+	if raw := r.URL.Query().Get("utxos"); raw != "" {
+		n, err := strconv.Atoi(raw)
+		if err != nil || n < 0 {
+			s.fail(w, http.StatusBadRequest, fmt.Errorf("utxos must be a non-negative integer"))
+			return
+		}
+		utxoCount = n
+	}
+	plan, err := s.backend.PlanConsolidation(wallet, utxoCount)
+	if err != nil {
+		s.fail(w, http.StatusUnprocessableEntity, err)
+		return
+	}
+	s.writeJSON(w, http.StatusOK, plan)
 }
 
 func (s *Server) handleApprove(w http.ResponseWriter, r *http.Request) {

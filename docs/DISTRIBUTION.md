@@ -131,7 +131,7 @@ Recommended hostname: `keeper-<index>.<your-domain>`.
 ## 3. Install
 
 ```bash
-VERSION=v0.1.0
+VERSION=v0.1.1
 scp "dedoo-multisig-manager-${VERSION}-linux-amd64.tar.gz" root@YOUR_HOST:/root/
 ssh root@YOUR_HOST
 cd /root
@@ -173,6 +173,8 @@ BACKEND="electrs"
 ELECTRS_URL="https://wojak-api.s3na.xyz"
 COINBASE_MATURITY="20"
 MIN_TRANSFER_SATS="10000"
+# Operator cap. The chain's 100 KB standard transaction limit allows about
+# 333 P2SH 2-of-3 inputs; raise this if you consolidate more per transaction.
 MAX_TX_INPUTS="100"
 
 ### Human-in-the-loop

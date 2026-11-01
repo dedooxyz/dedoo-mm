@@ -27,8 +27,9 @@ type fakeBackend struct {
 	keys     []processor.KeyView
 
 	// recording
-	lastTransferReq [4]string // wallet, to, amount, memo
-	lastReject      [2]string // id, reason
+	lastTransferReq    [4]string // wallet, to, amount, memo
+	lastConsolidateReq [3]string // wallet, utxoCount, memo
+	lastReject         [2]string // id, reason
 }
 
 func newFakeBackend(t *testing.T) *fakeBackend {
@@ -107,6 +108,48 @@ func (f *fakeBackend) ProposeTransfer(wallet, to string, amountSats int64, memo 
 	f.lastTransferReq = [4]string{wallet, to, fmt.Sprint(amountSats), memo}
 	return "trNEW", nil
 }
+func (f *fakeBackend) ProposeConsolidation(wallet string, utxoCount int, memo string) (string, error) {
+	if utxoCount < 0 {
+		return "", fmt.Errorf("bad count")
+	}
+	if utxoCount > 10 {
+		return "", fmt.Errorf("utxo count exceeds limit")
+	}
+	f.lastConsolidateReq = [3]string{wallet, fmt.Sprint(utxoCount), memo}
+	return "coNEW", nil
+}
+func (f *fakeBackend) PlanConsolidation(wallet string, utxoCount int) (processor.ConsolidationPlan, error) {
+	if utxoCount < 0 {
+		return processor.ConsolidationPlan{}, fmt.Errorf("bad count")
+	}
+	if utxoCount > 10 {
+		return processor.ConsolidationPlan{}, fmt.Errorf("utxo count exceeds limit")
+	}
+	requested := utxoCount
+	if utxoCount == 0 {
+		utxoCount = len(f.utxos)
+	}
+	selected := f.utxos
+	if utxoCount < len(selected) {
+		selected = selected[:utxoCount]
+	}
+	var gross int64
+	for _, u := range selected {
+		gross += u.Value
+	}
+	return processor.ConsolidationPlan{
+		Wallet:     wallet,
+		Available:  len(f.utxos),
+		Requested:  requested,
+		Selected:   len(selected),
+		MaxInputs:  10,
+		ChainLimit: 333,
+		GrossSats:  gross,
+		FeeSats:    1_000,
+		NetSats:    gross - 1_000,
+		UTXOs:      selected,
+	}, nil
+}
 func (f *fakeBackend) ApproveProposal(id string) (string, error) {
 	if _, ok := f.props[id]; !ok {
 		return "", fmt.Errorf("unknown")
@@ -139,6 +182,7 @@ func (f *fakeBackend) ListAccounts() []processor.AccountView {
 	return append([]processor.AccountView{{
 		Id: "active", Name: "Active signing vault", Chain: "wojakcoin", ChainKey: "wojakcoin",
 		Address: canonicalAPIVault, Required: 2, Active: true,
+		MaxInputs: 100, ChainInputLimit: 333,
 	}}, f.accounts...)
 }
 
@@ -255,6 +299,7 @@ func TestStatusRoute(t *testing.T) {
 	cfg := m["config"].(map[string]interface{})
 	if cfg["chainName"] != "wojakcoin" || cfg["requiredSignatures"] != float64(2) ||
 		cfg["vaultAddress"] != canonicalAPIVault || cfg["maxTxInputs"] != float64(100) ||
+		cfg["maxInputs"] != float64(100) || cfg["chainInputLimit"] != float64(333) ||
 		cfg["minTransferSats"] != float64(1_000) {
 		t.Fatalf("config block: %v", cfg)
 	}
@@ -331,6 +376,69 @@ func TestTransferRoute(t *testing.T) {
 	}
 	if rec := postJSON(t, s, "/api/transfer", `{"to":"WQEGp13ekBXRHjioBvQRNAMYrXRf5dJAMU","amountSats":1}`); rec.Code != http.StatusUnprocessableEntity {
 		t.Fatalf("below min status %d", rec.Code)
+	}
+}
+
+func TestConsolidateRoute(t *testing.T) {
+	s, fb := newTestServer(t)
+
+	rec := postJSON(t, s, "/api/consolidate", `{"wallet":"`+canonicalAPIVault+`","utxoCount":2,"memo":"merge"}`)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status %d: %s", rec.Code, rec.Body.String())
+	}
+	if id := decode(t, rec)["proposalId"]; id != "coNEW" {
+		t.Fatalf("proposalId = %v", id)
+	}
+	if fb.lastConsolidateReq != [3]string{canonicalAPIVault, "2", "merge"} {
+		t.Fatalf("consolidate args: %v", fb.lastConsolidateReq)
+	}
+
+	if rec := postJSON(t, s, "/api/consolidate", `{not json`); rec.Code != http.StatusBadRequest {
+		t.Fatalf("bad json status %d", rec.Code)
+	}
+	if rec := postJSON(t, s, "/api/consolidate", `{"utxoCount":11}`); rec.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("over-limit status %d", rec.Code)
+	}
+}
+
+func TestConsolidationPlanRoute(t *testing.T) {
+	s, _ := newTestServer(t)
+
+	rec := get(t, s, "/api/consolidation/plan?wallet="+canonicalAPIVault+"&utxos=1")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status %d: %s", rec.Code, rec.Body.String())
+	}
+	m := decode(t, rec)
+	if m["selectedUtxos"] != float64(1) || m["grossSats"] != float64(12_000) ||
+		m["feeSats"] != float64(1_000) || m["netSats"] != float64(11_000) {
+		t.Fatalf("plan = %v", m)
+	}
+	if m["maxInputs"] != float64(10) || m["chainLimit"] != float64(333) {
+		t.Fatalf("limits = %v", m)
+	}
+	if us, ok := m["utxos"].([]interface{}); !ok || len(us) != 1 {
+		t.Fatalf("plan utxos = %v", m["utxos"])
+	}
+
+	if rec := get(t, s, "/api/consolidation/plan?utxos=-1"); rec.Code != http.StatusBadRequest {
+		t.Fatalf("negative utxos status %d", rec.Code)
+	}
+	if rec := get(t, s, "/api/consolidation/plan?utxos=11"); rec.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("over-limit plan status %d", rec.Code)
+	}
+}
+
+func TestIndexServesConsolidationUI(t *testing.T) {
+	s, _ := newTestServer(t)
+	rec := get(t, s, "/")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status %d", rec.Code)
+	}
+	body := rec.Body.String()
+	for _, want := range []string{"Consolidate UTXOs", "submitConsolidation", "/api/consolidation/plan"} {
+		if !strings.Contains(body, want) {
+			t.Fatalf("embedded UI missing %q", want)
+		}
 	}
 }
 

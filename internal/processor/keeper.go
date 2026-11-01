@@ -389,6 +389,10 @@ func (k *Keeper) BroadcastProposal(id string) (string, error) {
 	if raw == "" {
 		raw = k.rawForSigningLocked(st)
 	}
+	if len(raw)/2 > chain.MaxTxBytes {
+		k.mu.Unlock()
+		return "", fmt.Errorf("refusing to broadcast %s: transaction is %d bytes; chain standard limit is %d", id, len(raw)/2, chain.MaxTxBytes)
+	}
 	st.broadcasting = true
 	k.mu.Unlock()
 

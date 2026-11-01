@@ -55,6 +55,12 @@ type AccountView struct {
 	HasKey    bool      `json:"hasKey"`
 	KeyPubkey string    `json:"keyPubkey,omitempty"`
 	Created   time.Time `json:"created"`
+
+	// Limits derived from the wallet's redeem script and the operator config.
+	// MaxInputs is the effective per-transaction cap; ChainInputLimit is the
+	// hard limit imposed by the chain's 100 KB standard transaction size.
+	MaxInputs       int `json:"maxInputs,omitempty"`
+	ChainInputLimit int `json:"chainInputLimit,omitempty"`
 }
 
 // CreateAccountRequest derives and saves a wallet on the node's fixed chain.
@@ -159,6 +165,10 @@ func (k *Keeper) walletViewLocked(w *wallet) AccountView {
 	if _, pub := k.walletKeyLocked(w); pub != "" {
 		v.HasKey = true
 		v.KeyPubkey = pub
+	}
+	if v.RedeemScript != "" {
+		v.ChainInputLimit = chainInputLimit(v.RedeemScript, v.Required)
+		v.MaxInputs = k.maxInputsFor(v.RedeemScript, v.Required)
 	}
 	return v
 }

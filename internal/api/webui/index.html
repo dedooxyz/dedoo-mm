@@ -301,6 +301,7 @@ tr:last-child td{border-bottom:0}
 const S = {
   status: null, proposals: [], utxos: null, error: null,
   view: "overview", draft: {to: "", amount: "", memo: ""},
+  consolidation: {count: "0", memo: "", plan: null, err: null, loading: false, planKey: "", seq: 0, timer: null},
   historyFilter: "all", historyQuery: "", open: new Set(),
   wallet: localStorage.getItem("dedoo.wallet") || "",
   accounts: [], keys: [], showCreateWallet: false,
@@ -379,7 +380,7 @@ async function load(manual){
     S.status = st; S.proposals = ps.proposals || []; S.error = null;
     if(S.view === "vault" && S.utxos === null) await loadUTXOs();
     const ae=document.activeElement;
-    const typing=!manual && ae && ae.matches && (ae.closest("#tform") || ae.closest(".walletform") || ae.classList.contains("search"));
+    const typing=!manual && ae && ae.matches && (ae.closest("#tform") || ae.closest("#cform") || ae.closest(".walletform") || ae.classList.contains("search"));
     if(typing) renderSidebar(); else render();
     if(manual) toast("Status refreshed","ok");
   }catch(e){
@@ -398,6 +399,7 @@ function selectedAccount(){
 }
 function switchWallet(addr){
   S.wallet=addr; localStorage.setItem("dedoo.wallet",addr); S.utxos=null;
+  S.consolidation.plan=null; S.consolidation.planKey=""; S.consolidation.count="0"; S.consolidation.memo="";
   load(false); navigate("overview");
 }
 function filters(){
@@ -531,6 +533,7 @@ function proposalCard(p){
       <span>Raw tx <span class="mono">${short(p.rawHex,18)}</span></span>
       <button class="btn ghost sm" onclick="copy('${p.rawHex||''}','Raw tx copied')">Copy raw</button>
     </div></div>` : "";
+  const isConsolidation = p.to && p.vault && p.to === p.vault;
   return `<article class="proposal st-${cls}" id="P-${p.proposalId}">
     <div class="ph">
       <span class="status ${cls}"><span class="dot"></span>${statusLabel(p)}</span>
@@ -538,7 +541,7 @@ function proposalCard(p){
       <span class="time">${ago(p.created)}</span>
     </div>
     <div class="intent">
-      <div><div class="k">Destination</div><div class="v mono">${p.to?esc(p.to):"—"}</div></div>
+      <div><div class="k">${isConsolidation?"Consolidation":"Destination"}</div><div class="v mono">${p.to?esc(p.to):"—"}</div></div>
       <div><div class="k">Amount</div><div class="v amount">${coin(p.amountSats)}</div><div class="small faint">${sats(p.amountSats)}</div></div>
       <div><div class="k">Memo</div><div class="v">${p.memo?esc(p.memo):"—"}</div></div>
     </div>
@@ -597,35 +600,66 @@ function overviewHTML(){
 function transferHTML(){
   const st=S.status, cfg=st.config, acct=selectedAccount();
   const canSign=!!acct && !!cfg.walletHasKey;
+  const maxInputs=cfg.maxInputs||cfg.maxTxInputs||0;
+  const chainLimit=cfg.chainInputLimit||0;
+  const c=S.consolidation;
   return `
   ${!acct?`<div class="notice">No wallet exists on this node yet. Create one in <a href="#/wallets" style="color:var(--accent)">Wallets</a>, then add your private key.</div>`:canSign?'':`<div class="notice">This wallet is watch-only on this node. Add its private key in <a href="#/wallets" style="color:var(--accent)">Wallets → Signing keys</a> before creating a proposal.</div>`}
   <div class="transfer-grid">
-    <section class="panel">
-      <div class="head">Transfer proposal</div>
-      <div class="body">
-        <form id="tform" onsubmit="submitTransfer(event)">
-          <div class="fieldwrap">
-            <label class="field">Destination address</label>
-            <input name="to" value="${esc(S.draft.to)}" placeholder="Wallet or vault address" autocomplete="off" oninput="S.draft.to=this.value">
-          </div>
-          <div class="formrow">
+    <div>
+      <section class="panel">
+        <div class="head">Transfer proposal</div>
+        <div class="body">
+          <form id="tform" onsubmit="submitTransfer(event)">
             <div class="fieldwrap">
-              <label class="field">Amount (sats)</label>
-              <input name="sats" type="number" min="1" value="${S.draft.amount}" placeholder="e.g. 30000000" oninput="S.draft.amount=this.value">
-              <div class="hint" id="amountHint">&nbsp;</div>
+              <label class="field">Destination address</label>
+              <input name="to" value="${esc(S.draft.to)}" placeholder="Wallet or vault address" autocomplete="off" oninput="S.draft.to=this.value">
             </div>
-            <div class="fieldwrap">
-              <label class="field">Memo (optional)</label>
-              <input name="memo" value="${esc(S.draft.memo)}" placeholder="Reference for co-signers" oninput="S.draft.memo=this.value">
+            <div class="formrow">
+              <div class="fieldwrap">
+                <label class="field">Amount (sats)</label>
+                <input name="sats" type="number" min="1" value="${S.draft.amount}" placeholder="e.g. 30000000" oninput="S.draft.amount=this.value">
+                <div class="hint" id="amountHint">&nbsp;</div>
+              </div>
+              <div class="fieldwrap">
+                <label class="field">Memo (optional)</label>
+                <input name="memo" value="${esc(S.draft.memo)}" placeholder="Reference for co-signers" oninput="S.draft.memo=this.value">
+              </div>
             </div>
-          </div>
-          <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:4px">
-            <button class="btn primary" type="submit" ${canSign?"":"disabled"}>${icon("send")} Create proposal</button>
-            <button class="btn" type="button" onclick="consolidate()">${icon("vault")} Consolidate vault</button>
-          </div>
-        </form>
-      </div>
-    </section>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:4px">
+              <button class="btn primary" type="submit" ${canSign?"":"disabled"}>${icon("send")} Create proposal</button>
+              <button class="btn" type="button" onclick="consolidate()">${icon("vault")} Consolidate vault</button>
+            </div>
+          </form>
+        </div>
+      </section>
+
+      <section class="panel" style="margin-top:16px">
+        <div class="head">Consolidate UTXOs</div>
+        <div class="body">
+          <form id="cform" onsubmit="submitConsolidation(event)">
+            <div class="formrow">
+              <div class="fieldwrap">
+                <label class="field">UTXOs to merge</label>
+                <input name="utxos" type="number" min="0" max="${maxInputs||1}" value="${esc(c.count)}" oninput="onConsolidationCount(this.value)">
+                <div class="hint" id="cHint">${consolidationHintHTML()}</div>
+              </div>
+              <div class="fieldwrap">
+                <label class="field">Memo (optional)</label>
+                <input name="memo" value="${esc(c.memo)}" placeholder="Reference for co-signers" oninput="S.consolidation.memo=this.value">
+              </div>
+            </div>
+            <div class="summary" id="cPreview">${consolidationPreviewHTML()}</div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px">
+              <button class="btn primary" type="submit" ${canSign?"":"disabled"}>${icon("vault")} Create consolidation proposal</button>
+              <button class="btn" type="button" onclick="setConsolidationMax()">Use max</button>
+              <button class="btn" type="button" onclick="refreshConsolidationPlan()">Refresh preview</button>
+            </div>
+            <div class="hint" style="margin-top:8px">The output amount is calculated from the selected UTXOs minus the network fee. A transaction that needs more inputs than the chain limit is refused.</div>
+          </form>
+        </div>
+      </section>
+    </div>
 
     <aside>
       <section class="panel summary">
@@ -635,7 +669,7 @@ function transferHTML(){
           <div class="row"><span class="k">Available</span><span>${coin(st.balanceSats)}</span></div>
           <div class="row"><span class="k">UTXO</span><span>${st.utxoCount}</span></div>
           <div class="row"><span class="k">Minimum</span><span>${sats(cfg.minTransferSats)}</span></div>
-          <div class="row"><span class="k">Max inputs / tx</span><span>${cfg.maxTxInputs}</span></div>
+          <div class="row"><span class="k">Max inputs / tx</span><span>${maxInputs||"—"}${chainLimit?` <span class="faint">(chain ${chainLimit})</span>`:""}</span></div>
           <div class="row"><span class="k">Maturity</span><span>${cfg.coinbaseMaturity} conf</span></div>
           <div class="hint" style="margin-top:10px">The network fee is calculated by the keeper when the proposal is built. Change, if any, returns to this vault.</div>
         </div>
@@ -652,6 +686,103 @@ function transferHTML(){
       </section>
     </aside>
   </div>`;
+}
+
+/* ---------- consolidation ---------- */
+function consolidationHintHTML(){
+  const cfg=(S.status&&S.status.config)||{};
+  const p=S.consolidation.plan;
+  const max=(p&&p.maxInputs)||cfg.maxInputs||cfg.maxTxInputs||0;
+  const chain=(p&&p.chainLimit)||cfg.chainInputLimit||0;
+  const raise=(max&&chain&&max<chain)?" · raise MAX_TX_INPUTS to consolidate more per tx":"";
+  return `0 = all mature · max ${max||"—"} per transaction${chain?` (chain limit ${chain})`:""}${raise}`;
+}
+
+function consolidationPreviewHTML(){
+  const c=S.consolidation, p=c.plan;
+  if(c.err) return `<div class="verr">${esc(c.err)}</div>`;
+  if(!p) return `<div class="hint">Loading consolidation preview…</div>`;
+  const utxos=p.utxos||[];
+  return `
+    <div class="row"><span class="k">Available mature UTXOs</span><span>${p.availableUtxos}</span></div>
+    <div class="row"><span class="k">Selected UTXOs</span><span>${p.selectedUtxos}</span></div>
+    <div class="row"><span class="k">Input value</span><span>${coin(p.grossSats)}</span></div>
+    <div class="row"><span class="k">Network fee</span><span>${coin(p.feeSats)}</span></div>
+    <div class="row"><span class="k">Consolidated output</span><span><b>${coin(p.netSats)}</b></span></div>
+    ${utxos.length?`<details style="margin-top:10px"><summary class="small faint" style="cursor:pointer">Selected UTXOs (${utxos.length})</summary>
+      <div class="table-scroll" style="margin-top:8px"><table><thead><tr><th>Txid</th><th>Vout</th><th>Value</th></tr></thead><tbody>
+      ${utxos.map(u=>`<tr><td class="mono">${short(u.txid,16)}</td><td>${u.vout}</td><td>${coin(u.value)}</td></tr>`).join("")}
+      </tbody></table></div></details>`:""}`;
+}
+
+function onConsolidationCount(v){
+  S.consolidation.count=v;
+  S.consolidation.planKey="";
+  clearTimeout(S.consolidation.timer);
+  S.consolidation.timer=setTimeout(refreshConsolidationPlan, 300);
+}
+
+async function refreshConsolidationPlan(){
+  if(!S.wallet || !S.status) return;
+  const count=parseInt(S.consolidation.count||"0",10);
+  if(isNaN(count)||count<0){
+    S.consolidation.err="Enter a valid UTXO count (0 = all mature)";
+    updateConsolidationPreview();
+    return;
+  }
+  const seq=(S.consolidation.seq||0)+1;
+  S.consolidation.seq=seq;
+  S.consolidation.planKey=S.wallet+"|"+count;
+  S.consolidation.loading=true;
+  try{
+    const p=await api("/api/consolidation/plan?wallet="+encodeURIComponent(S.wallet)+"&utxos="+count);
+    if(seq!==S.consolidation.seq) return;
+    S.consolidation.plan=p; S.consolidation.err=null;
+  }catch(e){
+    if(seq!==S.consolidation.seq) return;
+    S.consolidation.plan=null; S.consolidation.err=e.message;
+  }finally{
+    if(seq===S.consolidation.seq) S.consolidation.loading=false;
+  }
+  updateConsolidationPreview();
+}
+
+function updateConsolidationPreview(){
+  const box=el("cPreview"), hint=el("cHint");
+  if(box) box.innerHTML=consolidationPreviewHTML();
+  if(hint) hint.innerHTML=consolidationHintHTML();
+}
+
+function bindConsolidation(){
+  if(!S.status || !S.wallet) return;
+  const count=parseInt(S.consolidation.count||"0",10)||0;
+  const key=S.wallet+"|"+count;
+  if(S.consolidation.planKey!==key) refreshConsolidationPlan();
+}
+
+function setConsolidationMax(){
+  const p=S.consolidation.plan, cfg=(S.status&&S.status.config)||{};
+  const avail=p?p.availableUtxos:(S.status?S.status.utxoCount:0);
+  const max=(p&&p.maxInputs)||cfg.maxInputs||cfg.maxTxInputs||1;
+  S.consolidation.count=String(Math.min(avail,max));
+  S.consolidation.planKey="";
+  const inp=q('#cform [name="utxos"]'); if(inp) inp.value=S.consolidation.count;
+  refreshConsolidationPlan();
+}
+
+async function submitConsolidation(ev){
+  ev.preventDefault();
+  const f=ev.target;
+  const count=parseInt(f.utxos.value,10);
+  const memo=f.memo.value.trim();
+  if(isNaN(count)||count<0){ toast("Enter a valid UTXO count (0 = all mature)","err"); return; }
+  try{
+    const r=await api("/api/consolidate",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({wallet:S.wallet,utxoCount:count,memo})});
+    toast("Consolidation proposal created: "+r.proposalId,"ok");
+    S.consolidation.count="0"; S.consolidation.memo=""; S.consolidation.plan=null; S.consolidation.planKey="";
+    await load(false);
+    navigate("approvals"); S.approvalsTab="others"; render();
+  }catch(e){ toast("Consolidation failed: "+e.message,"err"); }
 }
 
 /* ---------- approvals ---------- */
@@ -733,7 +864,7 @@ function vaultHTML(){
         <div class="k">Chain</div><div class="v">${cfg.chainName}</div>
         <div class="k">Threshold</div><div class="v">${cfg.requiredSignatures}-of-3 signatures</div>
         <div class="k">Coinbase maturity</div><div class="v">${cfg.coinbaseMaturity} confirmations</div>
-        <div class="k">Max inputs / tx</div><div class="v">${cfg.maxTxInputs} (limit 600)</div>
+        <div class="k">Max inputs / tx</div><div class="v">${cfg.maxInputs||cfg.maxTxInputs} per tx${cfg.chainInputLimit?` <span class="faint">(chain limit ${cfg.chainInputLimit})</span>`:""}</div>
       </div>
     </div>
   </section>
@@ -770,7 +901,7 @@ function nodeHTML(){
       <div class="k">Backend</div><div class="v">${cfg.backend}</div>
       <div class="k">Chain tip</div><div class="v">${st.tipHeight} <span class="mono faint">${short(st.tipHash,16)}</span></div>
       <div class="k">Minimum transfer</div><div class="v">${sats(cfg.minTransferSats)}</div>
-      <div class="k">Max inputs</div><div class="v">${cfg.maxTxInputs} per transaction</div>
+      <div class="k">Max inputs</div><div class="v">${cfg.maxInputs||cfg.maxTxInputs} per transaction${cfg.chainInputLimit?` (chain limit ${cfg.chainInputLimit})`:""}</div>
       <div class="k">Maturity</div><div class="v">${cfg.coinbaseMaturity} confirmations</div>
       <div class="k">Open rejects</div><div class="v">${self.rejectCount||0}</div>
     </div></div></section>
@@ -957,7 +1088,7 @@ function render(){
   el("pageSub").textContent=VIEW_META[view][1];
   renderSidebar();
   if(view==="overview") el("view").innerHTML=overviewHTML();
-  else if(view==="transfer") { el("view").innerHTML=transferHTML(); bindAmountHint(); }
+  else if(view==="transfer") { el("view").innerHTML=transferHTML(); bindAmountHint(); bindConsolidation(); }
   else if(view==="approvals") el("view").innerHTML=approvalsHTML();
   else if(view==="wallets") renderWallets();
   else if(view==="history") el("view").innerHTML=historyHTML();
@@ -1011,10 +1142,11 @@ async function submitTransfer(ev){
 function consolidate(){
   const a=selectedAccount();
   if(!a){ toast("Select a wallet first","err"); return; }
-  S.draft.to=a.address;
-  S.draft.amount=String(S.status.balanceSats);
+  S.consolidation.count="0";
+  S.consolidation.planKey="";
   navigate("transfer");
-  toast("Consolidation draft for "+a.name+": destination is the wallet, amount is its full balance. Submit to propose.","ok");
+  setTimeout(()=>{ const f=el("cform"); if(f) f.scrollIntoView({behavior:"smooth",block:"center"}); }, 60);
+  toast("Consolidation: choose how many UTXOs to merge. The output amount is derived from those UTXOs minus the network fee.","ok");
 }
 
 /* ---------- boot ---------- */

@@ -22,9 +22,10 @@ const (
 	ModeKeeper    Mode = "keeper"    // one of the 3 multisig signers
 )
 
-// MaxTxInputsLimit is the hard cap for one transaction: ~600 P2SH 2-of-3
-// inputs fits the 1 MB network transaction limit.
-const MaxTxInputsLimit = 600
+// MaxTxInputsLimit is the absolute configuration ceiling for one transaction.
+// The effective limit is lower and wallet-specific: the chain relays at most
+// MaxStandardTxBytes (100 KB), and ~333 P2SH 2-of-3 inputs fit in that size.
+const MaxTxInputsLimit = chain.MaxTxInputs
 
 // Config is the fully-resolved keeper configuration.
 type Config struct {
@@ -175,7 +176,7 @@ func Load() (*Config, error) {
 		return nil, fmt.Errorf("config: REQUIRED_SIGS must be 1..3, got %d", c.RequiredSigs)
 	}
 	if c.MaxTxInputs < 1 || c.MaxTxInputs > MaxTxInputsLimit {
-		return nil, fmt.Errorf("config: MAX_TX_INPUTS must be 1..%d (1 MB transaction limit), got %d", MaxTxInputsLimit, c.MaxTxInputs)
+		return nil, fmt.Errorf("config: MAX_TX_INPUTS must be 1..%d; the effective limit is further capped by the chain's %d-byte standard transaction size", MaxTxInputsLimit, chain.MaxStandardTxBytes)
 	}
 	if c.P2PGroup == "" {
 		c.P2PGroup = c.ChainName

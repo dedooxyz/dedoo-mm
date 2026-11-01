@@ -49,7 +49,7 @@ The installer creates:
 Copy the package to the server and install:
 
 ```bash
-VERSION=v0.1.0
+VERSION=v0.1.1
 scp "dedoo-multisig-manager-${VERSION}-linux-amd64.tar.gz" root@YOUR_HOST:/root/
 ssh root@YOUR_HOST
 cd /root
@@ -114,6 +114,8 @@ ELECTRS_URL="https://wojak-api.s3na.xyz"   # JKC: https://junk-api.s3na.xyz
 
 COINBASE_MATURITY="20"            # WJK 20 / JKC 70 (clamped to chain minimum)
 MIN_TRANSFER_SATS="10000"
+# Operator cap. The chain's 100 KB standard transaction limit allows about
+# 333 P2SH 2-of-3 inputs; raise this if you consolidate more per transaction.
 MAX_TX_INPUTS="100"
 
 AUTO_SIGN="false"
@@ -308,6 +310,19 @@ systemctl restart dedoo-mm
 
 Protocol note: keeper P2P uses `/dedoo-mm/v3`; all three nodes must run the
 same protocol version.
+
+### v0.1.1 upgrade notes
+
+- **Consolidation with UTXO selection**: the transfer page now has a
+  *Consolidate UTXOs* panel. Choose how many mature UTXOs to merge (`0` = all
+  mature); the output amount is derived from those UTXOs minus the network fee.
+- **Chain input limit**: the keeper now enforces the chain's 100 KB standard
+  transaction size, which allows about **333 P2SH 2-of-3 inputs**. `MAX_TX_INPUTS`
+  can only lower that limit; values above it are clamped at runtime.
+- No `.env` change is required. To consolidate more per transaction, raise
+  `MAX_TX_INPUTS` (for example `MAX_TX_INPUTS="333"`) and restart.
+- Upgrade all three keepers before creating a new proposal. Config, wallets,
+  keys and proposals are preserved by the installer/upgrade procedure.
 
 ---
 
